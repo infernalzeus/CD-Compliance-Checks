@@ -117,25 +117,11 @@ def hydration_status(path: Path) -> dict:
     }
 
 
-def _pin_file(path: Path) -> None:
-    """Ask OneDrive to keep the file on this device (triggers background download).
-
-    Uses ``attrib +P -U`` which sets the pinned ("always available") state. This
-    is a non-blocking trigger: OneDrive then hydrates the file in the background,
-    which we watch via the physical size. Failure here is non-fatal — the reader
-    fallback in :func:`ensure_local` will force hydration if pinning does nothing.
-    """
-    if not _IS_WINDOWS:
-        return
-    try:
-        subprocess.run(
-            ["attrib", "+P", "-U", str(path)],
-            check=False,
-            capture_output=True,
-            shell=False,
-        )
-    except OSError:
-        pass
+# NOTE: we deliberately do NOT pin files (`attrib +P`). Pinning sets the
+# persistent "always keep on this device" state, so OneDrive would keep the
+# ~1 GB .bin files hydrated and re-downloading in the background forever — even
+# after this app exits. Reading the file (see `_hydrate_reader`) is enough to
+# hydrate it just for the run, without leaving that persistent state behind.
 
 
 def _hydrate_reader(path: Path, state: dict, stop: threading.Event,
@@ -187,8 +173,7 @@ def ensure_local(
         return
 
     bus.emit("download_start", file=str(path), total_bytes=logical)
-    _pin_file(path)  # ask OneDrive to keep the file (a secondary download trigger)
-
+    # Hydrate transiently by reading the file (no persistent pin — see note above).
     state = {"read": 0, "done": False, "err": None}
     stop = threading.Event()
     reader = threading.Thread(target=_hydrate_reader, args=(path, state, stop), daemon=True)

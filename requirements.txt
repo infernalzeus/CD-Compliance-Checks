@@ -1,7 +1,11 @@
 # CD-Compliance-Checks orchestrator dependencies.
-# The two external tools (actigraphy-epoching, actigraphy-sleep-metrics) bring
-# their own numpy/pandas/scipy/matplotlib; they are listed here too because this
-# package reads their CSV outputs and evaluates compliance directly.
+#
+# The two external tools (Step 1 actigraphy-epoching, Step 2 actigraphy-sleep-
+# metrics) are standalone script repos, not pip packages, so they are NOT listed
+# here. After installing these deps, fetch them from GitHub with:
+#     python setup_tools.py            # clone if missing
+#     python setup_tools.py --update   # git pull the latest
+# (that also installs each tool's own numpy/pandas/scipy/matplotlib requirements).
 
 pyyaml>=6.0        # config loading
 pandas>=1.5        # epoch CSV reading, compliance, Excel assembly

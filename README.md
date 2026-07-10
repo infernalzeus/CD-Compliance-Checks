@@ -51,12 +51,20 @@ DASHBOARD TEST DATA/<CDxxx>/<Season>/Actigraph/   (all outputs + raw .bin replic
 ## Install
 
 ```bash
-python -m pip install -r requirements.txt
+python -m pip install -r requirements.txt   # orchestrator + dashboard deps
+python setup_tools.py                        # clone the Step 1 & 2 tool repos from GitHub
+#   python setup_tools.py --update           # …and git pull the latest next time
 ```
 
-The two external tools bring their own `numpy/pandas/scipy/matplotlib`. The
-interpreter named in `config.yaml` (`tools.python_executable`) must be able to
-import those and run both tools.
+`setup_tools.py` clones the two standalone tool repos into `tools/` (paths and
+GitHub URLs come from `config.yaml → tools`) and installs each tool's own
+`numpy/pandas/scipy/matplotlib`. They are script repos, not pip packages, so they
+are fetched this way rather than via `requirements.txt`. The interpreter named in
+`tools.python_executable` must be able to run them.
+
+> The **compliance** logic and its thresholds live in this project
+> (`cdcompliance/compliance.py` + `config.yaml`), not in the tool repos — only
+> Step 2's sleep metrics (incl. SRI) live in `actigraphy-sleep-metrics`.
 
 ## Configure
 
@@ -66,10 +74,12 @@ Copy the template and edit paths:
 copy config.example.yaml config.yaml   # Windows
 ```
 
-Key fields: `paths.source_root`, `paths.output_root`,
-`tools.epoching_repo`, `tools.sleep_metrics_repo`, `tools.python_executable`,
-and the `compliance` thresholds. (For this machine, `config.yaml` is already
-filled in.)
+Key fields: `paths.source_root`, `paths.output_root`, `tools.epoching_repo`,
+`tools.sleep_metrics_repo` (+ their `_url`s), `tools.python_executable`, and the
+`compliance` thresholds. The **source / output roots and both tool-repo folders
+are also editable at runtime** from the dashboard's top-right **⚙** panel, and
+persist across sessions in `runtime_settings.json` — handy for different machines
+/ users with different layouts.
 
 ## Run
 

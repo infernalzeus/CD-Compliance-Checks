@@ -8,6 +8,9 @@ config.yaml
 # Per-install path overrides set from the dashboard UI.
 runtime_settings.json
 
+# External tool repos cloned by setup_tools.py (fetched from GitHub, not vendored).
+tools/
+
 # Python
 __pycache__/
 *.py[cod]

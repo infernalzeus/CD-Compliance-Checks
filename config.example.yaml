@@ -11,10 +11,15 @@ paths:
   output_root: 'N:\CSI\Lab Files\CHiP - D\DASHBOARD TEST DATA'
 
 tools:
-  # Step 1: actigraphy-epoching repo (.bin -> 60s epoch CSV).
-  epoching_repo: 'N:\Code\git repositories\Collab Projects\actigraphy-epoching'
-  # Step 2: actigraphy-sleep-metrics repo (epoch CSV -> circadian metrics).
-  sleep_metrics_repo: 'N:\Code\git repositories\My Repo\actigraphy-sleep-metrics'
+  # Local folders for the two tool repos. `python setup_tools.py` clones them
+  # here from the URLs below if missing (or `--update` to git pull the latest).
+  # Override these folders from the dashboard ⚙ settings if you keep them
+  # elsewhere. Relative paths resolve against this config file.
+  epoching_repo: 'tools/actigraphy-epoching'
+  sleep_metrics_repo: 'tools/actigraphy-sleep-metrics'
+  # GitHub sources fetched by setup_tools.py.
+  epoching_repo_url: 'https://github.com/liyang-D/actigraphy-epoching.git'
+  sleep_metrics_repo_url: 'https://github.com/infernalzeus/actigraphy-sleep-metrics.git'
   # Interpreter used to launch both tools. Must have numpy/pandas/scipy/matplotlib
   # (and Step 2's dependencies) importable. Use a full path to pin a specific env.
   python_executable: 'python'

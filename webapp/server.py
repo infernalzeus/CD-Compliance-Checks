@@ -62,6 +62,10 @@ def _apply_runtime_settings() -> None:
             _config.paths.source_root = Path(data["source_root"])
         if data.get("output_root"):
             _config.paths.output_root = Path(data["output_root"])
+        if data.get("epoching_repo"):
+            _config.tools.epoching_repo = Path(data["epoching_repo"])
+        if data.get("sleep_metrics_repo"):
+            _config.tools.sleep_metrics_repo = Path(data["sleep_metrics_repo"])
     except Exception as exc:  # bad settings file must not stop startup
         print(f"[settings] could not load {_SETTINGS_PATH}: {exc}")
 
@@ -135,12 +139,19 @@ async def api_get_settings() -> JSONResponse:
 
 @app.post("/api/settings")
 async def api_set_settings(payload: dict) -> JSONResponse:
-    src = (payload.get("source_root") or "").strip().strip('"')
-    out = (payload.get("output_root") or "").strip().strip('"')
+    def _clean(key):
+        return (payload.get(key) or "").strip().strip('"')
+
+    src, out = _clean("source_root"), _clean("output_root")
+    e1, e2 = _clean("epoching_repo"), _clean("sleep_metrics_repo")
     if src:
         _config.paths.source_root = Path(src)
     if out:
         _config.paths.output_root = Path(out)
+    if e1:
+        _config.tools.epoching_repo = Path(e1)
+    if e2:
+        _config.tools.sleep_metrics_repo = Path(e2)
     saved = True
     try:
         _SETTINGS_PATH.write_text(
@@ -148,6 +159,8 @@ async def api_set_settings(payload: dict) -> JSONResponse:
                 {
                     "source_root": str(_config.paths.source_root),
                     "output_root": str(_config.paths.output_root),
+                    "epoching_repo": str(_config.tools.epoching_repo),
+                    "sleep_metrics_repo": str(_config.tools.sleep_metrics_repo),
                 },
                 indent=2,
             ),
@@ -156,9 +169,9 @@ async def api_set_settings(payload: dict) -> JSONResponse:
     except Exception as exc:
         saved = False
         print(f"[settings] could not persist: {exc}")
-    payload = _settings_payload()
-    payload["persisted"] = saved
-    return JSONResponse(payload)
+    result = _settings_payload()
+    result["persisted"] = saved
+    return JSONResponse(result)
 
 
 def _settings_payload() -> dict:
@@ -167,6 +180,10 @@ def _settings_payload() -> dict:
         "output_root": str(_config.paths.output_root),
         "source_exists": _config.paths.source_root.exists(),
         "output_exists": _config.paths.output_root.exists(),
+        "epoching_repo": str(_config.tools.epoching_repo),
+        "sleep_metrics_repo": str(_config.tools.sleep_metrics_repo),
+        "epoching_exists": _config.tools.epoching_repo.exists(),
+        "sleep_metrics_exists": _config.tools.sleep_metrics_repo.exists(),
     }
 
 

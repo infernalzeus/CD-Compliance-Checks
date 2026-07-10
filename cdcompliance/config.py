@@ -34,14 +34,18 @@ ALL_DEVICES = (
 
 @dataclass
 class ToolsConfig:
-    # Repo dir of Step 1 (actigraphy-epoching). Tools are run as `python -m cli`
-    # with cwd set to these dirs, because they rely on bare/relative imports.
+    # Local repo dir of Step 1 (actigraphy-epoching). Tools are run as
+    # `python -m cli` with cwd set to these dirs (they use bare/relative imports).
+    # setup_tools.py clones these from the *_url below if missing.
     epoching_repo: Path
-    # Repo dir of Step 2 (actigraphy-sleep-metrics).
+    # Local repo dir of Step 2 (actigraphy-sleep-metrics).
     sleep_metrics_repo: Path
     # Interpreter used to launch both tools. Must have numpy/pandas/scipy/
     # matplotlib (and Step 2's deps) importable.
     python_executable: str = "python"
+    # GitHub sources — setup_tools.py fetches the latest from here on install.
+    epoching_repo_url: str = "https://github.com/liyang-D/actigraphy-epoching.git"
+    sleep_metrics_repo_url: str = "https://github.com/infernalzeus/actigraphy-sleep-metrics.git"
 
 
 @dataclass
@@ -153,6 +157,13 @@ def load_config(config_path: Path) -> Config:
         epoching_repo=_as_path(tools_raw["epoching_repo"], base),
         sleep_metrics_repo=_as_path(tools_raw["sleep_metrics_repo"], base),
         python_executable=tools_raw.get("python_executable", "python"),
+        epoching_repo_url=tools_raw.get(
+            "epoching_repo_url", "https://github.com/liyang-D/actigraphy-epoching.git"
+        ),
+        sleep_metrics_repo_url=tools_raw.get(
+            "sleep_metrics_repo_url",
+            "https://github.com/infernalzeus/actigraphy-sleep-metrics.git",
+        ),
     )
     compliance = ComplianceConfig(
         **{k: v for k, v in comp_raw.items() if k in _field_names(ComplianceConfig)}

@@ -105,6 +105,8 @@ async function loadSettings() {
   renderPaths(s);
   $("#set-source").value = s.source_root || "";
   $("#set-output").value = s.output_root || "";
+  $("#set-step1").value = s.epoching_repo || "";
+  $("#set-step2").value = s.sleep_metrics_repo || "";
   return s;
 }
 loadSettings();
@@ -119,13 +121,20 @@ $("#settings-modal").addEventListener("click", (e) => {
   if (e.target.id === "settings-modal") $("#settings-modal").classList.add("hidden");
 });
 $("#set-save").addEventListener("click", async () => {
-  const body = { source_root: $("#set-source").value, output_root: $("#set-output").value };
+  const body = {
+    source_root: $("#set-source").value,
+    output_root: $("#set-output").value,
+    epoching_repo: $("#set-step1").value,
+    sleep_metrics_repo: $("#set-step2").value,
+  };
   const s = await api("/api/settings", {
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
   renderPaths(s);
+  const ok = (b) => (b ? "✓" : "✗");
   $("#set-note").innerHTML =
-    `source ${s.source_exists ? "✓" : "✗ not found"} · output ${s.output_exists ? "✓" : "✗ not found"}` +
+    `source ${ok(s.source_exists)} · output ${ok(s.output_exists)} · ` +
+    `step 1 ${ok(s.epoching_exists)} · step 2 ${ok(s.sleep_metrics_exists)}` +
     (s.persisted === false ? " · could not persist" : " · saved for next session");
   runGrid.reload();
   viewGrid.reload();
