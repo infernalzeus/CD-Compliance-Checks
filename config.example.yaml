@@ -1,0 +1,57 @@
+# CD-Compliance-Checks configuration (template).
+#
+# Copy this file to `config.yaml` and adjust the paths for your machine.
+# Windows paths are single-quoted so backslashes and spaces are taken literally.
+# Relative paths are resolved against the directory holding this config file.
+
+paths:
+  # Parent folder containing participant folders (CD011, CD012, ...).
+  source_root: 'N:\CSI\OneDrive - Canterbury Christ Church University\Welcome Trust - CHiP-D Data Repository\Tier 1\staging'
+  # Dashboard output tree. Outputs land in <output_root>/<participant>/<season>/<Device>/
+  output_root: 'N:\CSI\Lab Files\CHiP - D\DASHBOARD TEST DATA'
+
+tools:
+  # Step 1: actigraphy-epoching repo (.bin -> 60s epoch CSV).
+  epoching_repo: 'N:\Code\git repositories\Collab Projects\actigraphy-epoching'
+  # Step 2: actigraphy-sleep-metrics repo (epoch CSV -> circadian metrics).
+  sleep_metrics_repo: 'N:\Code\git repositories\My Repo\actigraphy-sleep-metrics'
+  # Interpreter used to launch both tools. Must have numpy/pandas/scipy/matplotlib
+  # (and Step 2's dependencies) importable. Use a full path to pin a specific env.
+  python_executable: 'python'
+
+# Default run scope (override per run via CLI flags).
+participant: 'CD011'
+devices: ['actigraph']     # others (expiwell, saliva, cognitron, qualtrics, mieye) are stubs
+seasons: null              # null => all discovered season folders
+copy_bin: true             # replicate the raw ~1.1 GB .bin into the output tree
+
+actigraph_folder_name: 'Actigraph'
+actigraph_bin_glob: '*.bin'
+
+# Actigraph compliance — wear-validity rule (best-practice):
+#   1. non-wear detection: an epoch is non-wear when >=2 of 3 axis SDs are below
+#      nonwear_axis_sd_g (device motionless), sustained for nonwear_min_minutes.
+#   2. valid day: >= min_valid_hours of WEAR time AND hourly-mean SVM range
+#      >= min_diurnal_range_svm (rejects flat/constant days).
+#   3. PASS when valid_days >= min_valid_days (REVIEW within margin, else FAIL).
+# Thresholds are calibratable; the per-day wear/range table is in every report.
+compliance:
+  nonwear_axis_sd_g: 0.013      # ~13 mg (van Hees). Lower = stricter non-wear.
+  nonwear_min_minutes: 30       # sustained stillness required for non-wear
+  min_valid_hours: 10.0         # wear hours needed for a "valid day"
+  min_valid_days: 3             # valid days needed to PASS
+  review_margin_days: 1         # within this of the bar => REVIEW instead of FAIL
+  min_diurnal_range_svm: 20.0   # min hourly-mean SVM range for a valid (worn) day
+  expected_wear_hours: 16.0     # denominator for daily %compliance
+  epochs_per_hour: 60           # 60-second epochs
+  activity_threshold_svm: 5.0   # fallback only (SVM-only inputs, no axis SDs)
+  svm_column: 'SVM_sum'
+  time_column: 'Time'
+
+# OneDrive Files On-Demand hydration behaviour.
+onedrive:
+  poll_interval_seconds: 1.0
+  stall_timeout_seconds: 30.0    # force-read the file if download stalls this long
+  total_timeout_seconds: 3600.0  # give up after this long waiting for a download
+
+runs_dir: 'runs'

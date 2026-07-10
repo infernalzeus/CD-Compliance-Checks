@@ -1,0 +1,22 @@
+# Per-run logs and summaries
+runs/
+
+# Local machine config (keep config.example.yaml in git; config.yaml is local).
+# Comment this out if you want to version your active config.
+config.yaml
+
+# Per-install path overrides set from the dashboard UI.
+runtime_settings.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# OS / editor
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/

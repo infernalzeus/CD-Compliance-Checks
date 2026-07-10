@@ -1,0 +1,13 @@
+# CD-Compliance-Checks orchestrator dependencies.
+# The two external tools (actigraphy-epoching, actigraphy-sleep-metrics) bring
+# their own numpy/pandas/scipy/matplotlib; they are listed here too because this
+# package reads their CSV outputs and evaluates compliance directly.
+
+pyyaml>=6.0        # config loading
+pandas>=1.5        # epoch CSV reading, compliance, Excel assembly
+numpy>=1.23        # compliance statistics
+openpyxl>=3.1      # .xlsx workbook writing
+
+# Web dashboard (webapp/).
+fastapi>=0.110     # dashboard API
+uvicorn[standard]>=0.27   # ASGI server + websockets

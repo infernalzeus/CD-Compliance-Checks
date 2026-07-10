@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CHiP-D · Compliance Dashboard</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%234f8cff'/%3E%3Cpath d='M39 15a17 17 0 1 0 11 30A14 14 0 1 1 39 15Z' fill='%23eaf3ff'/%3E%3Ccircle cx='45' cy='23' r='2.6' fill='%23eaf3ff'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
+        <rect width="64" height="64" rx="15" fill="#4f8cff" />
+        <path d="M39 15a17 17 0 1 0 11 30A14 14 0 1 1 39 15Z" fill="#eaf3ff" />
+        <circle cx="45" cy="23" r="2.6" fill="#eaf3ff" />
+      </svg>
+      <span>CHiP-D · Compliance Dashboard</span>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="run">1 · Run Checks</button>
+      <button class="tab" data-tab="view">2 · Visualise</button>
+    </nav>
+    <div class="paths" id="paths"></div>
+    <button class="closebtn" id="settings-btn" title="Set source / output folders">⚙</button>
+    <button class="closebtn" id="shutdown" title="Stop the server and free the port">✕</button>
+  </header>
+
+  <div class="modal hidden" id="settings-modal">
+    <div class="modal-box">
+      <h3>Folders</h3>
+      <p class="modal-sub">Set the input / output roots for this machine. Saved for next session.</p>
+      <label for="set-source">Source root · WT OneDrive staging</label>
+      <input id="set-source" type="text" spellcheck="false" />
+      <label for="set-output">Output root · Dashboard Test Data</label>
+      <input id="set-output" type="text" spellcheck="false" />
+      <div class="modal-note" id="set-note"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="set-cancel">Cancel</button>
+        <button class="btn" id="set-save">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================ PANEL 1 ============================ -->
+  <main class="panel" id="panel-run">
+    <section class="left">
+      <div class="panel-head">
+        <h2>Source · WT OneDrive staging</h2>
+        <div class="controls">
+          <label class="chk"><input type="checkbox" id="dry-run" /> dry run</label>
+          <label class="chk"><input type="checkbox" id="force-run" /> force reprocess</label>
+          <label class="chk"><input type="checkbox" id="verbose" checked /> verbose</label>
+          <button class="btn ghost" id="clear-run">Clear selection</button>
+        </div>
+      </div>
+      <div class="grid" id="grid-run"></div>
+      <div class="legend">
+        <span><i class="sw pending"></i> not processed</span>
+        <span><i class="sw complete"></i> processed</span>
+        <span><i class="sw partial"></i> partial (new/needs run)</span>
+        <span><i class="sw empty"></i> no data</span>
+      </div>
+      <div class="logbox">
+        <div class="logbox-head">MESSAGE / LOG</div>
+        <div class="log" id="log-run"></div>
+      </div>
+    </section>
+
+    <div class="middle">
+      <button class="btn run" id="run-btn">RUN<br />CHECKS</button>
+      <div class="sel-count" id="sel-count-run">0 selected</div>
+    </div>
+
+    <section class="right">
+      <div class="panel-head"><h2>Progress</h2>
+        <div class="head-right">
+          <span id="job-status" class="pill"></span>
+          <button class="btn ghost danger" id="stop-btn" style="display:none">■ STOP</button>
+        </div>
+      </div>
+      <div class="progress-list" id="progress-list"></div>
+      <div class="filebox">
+        <div class="filebox-head">WT OneDrive <span id="fb-participant"></span></div>
+        <div class="filetree" id="filetree"><div class="muted">Select a single cell to view its staging files.</div></div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============================ PANEL 2 ============================ -->
+  <main class="panel hidden" id="panel-view">
+    <section class="left">
+      <div class="panel-head">
+        <h2>Output · Dashboard Test Data</h2>
+        <div class="controls">
+          <button class="btn ghost" id="clear-view">Clear selection</button>
+        </div>
+      </div>
+      <div class="grid" id="grid-view"></div>
+      <div class="legend">
+        <span><i class="sw green"></i> all compliant</span>
+        <span><i class="sw orange"></i> some compliant</span>
+        <span><i class="sw red"></i> none compliant</span>
+        <span><i class="sw empty"></i> none processed</span>
+      </div>
+      <div class="filebox">
+        <div class="filebox-head">Step 2 measures <span id="mv-title"></span></div>
+        <div class="measures" id="measures"><div class="muted">Select one folder, then pick a device below.</div></div>
+        <div class="device-row" id="device-row"></div>
+      </div>
+    </section>
+
+    <div class="middle">
+      <button class="btn run" id="agg-btn">AGGREGATE</button>
+      <div class="sel-count" id="sel-count-view">0 selected</div>
+    </div>
+
+    <section class="right">
+      <div class="panel-head"><h2>Combined compliance</h2></div>
+      <div class="agg" id="agg"><div class="muted">Select processed folders and press AGGREGATE.</div></div>
+    </section>
+
+    <section class="detail" id="detail-panel">
+      <div class="detail-head">
+        <span id="detail-title">Report / measure viewer</span>
+        <span id="detail-open"></span>
+      </div>
+      <div class="detail-body" id="detail-body">
+        <div class="muted">Pick a recording above, then click a measure or report to view it here.</div>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,60 @@
+{
+	"nodes":[
+		{"id":"src","type":"text","text":"# 📦 GENEActiv `.bin`  (OneDrive staging)\n`…\\Tier 1\\staging\\CDxxx\\Season\\Actigraph\\*.bin`\n\n- ~1.1 GB, usually a **dehydrated OneDrive placeholder**\n- Source tree is read-only — never modified","x":0,"y":-220,"width":580,"height":170},
+
+		{"id":"grp-pipe1","type":"group","x":-40,"y":20,"width":640,"height":2280,"color":"3","label":"Pipe 1 · Run Checks  —  cdcompliance core, per participant → season → Actigraph .bin"},
+
+		{"id":"s-discover","type":"text","text":"## 🔎 Discover\n*discovery.py · manifest.py*\n\n- Seasons read **dynamically** (handles odd names like `Autumn  2025`)\n- Find every `*.bin` in each season's `Actigraph` folder\n- Empty folder → “no data”","x":0,"y":70,"width":560,"height":180,"color":"6"},
+
+		{"id":"s-resume","type":"text","text":"## ♻️ Selective / resume\n*master output structure*\n\n- **Skip** items whose full output set exists (grey→white)\n- Missing any required file → **partial / orange**, needs run\n- **Step-level resume:** if `_60s.csv` exists, skip the download **and** Step 1 — only regenerate missing downstream files\n- `force reprocess` redoes everything","x":0,"y":290,"width":560,"height":220,"color":"6"},
+
+		{"id":"s-hydrate","type":"text","text":"## ☁️ OneDrive hydrate\n*onedrive.py*\n\n- Detect dehydrated placeholder → download the `.bin`\n- Progress = **bytes read** from the file as it hydrates (live % bar + timer)\n- Skipped entirely on a resume","x":0,"y":550,"width":560,"height":170,"color":"6"},
+
+		{"id":"s-step1","type":"text","text":"## ⚙️ Step 1 · Epoching\n*actigraphy-epoching · `python -u -m cli process`*\n\n`.bin` → **`<stem>_60s.csv`** (+ `.metadata.json`)\n- 60-s epochs, `full-summary` → **SVM_sum + Ax/Ay/Az means & SDs**\n- Run unbuffered (`-u`) so verbose streams live\n\n> Internals detailed in `actigraphy-pipeline.canvas`","x":0,"y":760,"width":560,"height":210,"color":"3"},
+
+		{"id":"s-report1","type":"text","text":"## 📑 Step 1 report\n*scripts.generate_sleep_report*\n\n`_60s.csv` → **`_60s_sleep_report.pdf`** (per-day activity + light). Best-effort · skipped if present.","x":0,"y":1010,"width":560,"height":130,"color":"1"},
+
+		{"id":"s-compliance","type":"text","text":"## ✅ Compliance — wear-validity\n*compliance.py  ·  the gatekeeper*\n\n**① Non-wear (van Hees / GGIR)**\nA worn wrist always micro-moves. Epoch = **non-wear** when ≥ 2 of 3 axis SDs `< 0.013 g` (13 mg), sustained ≥ 30 min. Else = **wear**.\n\n**② Valid day** — needs BOTH:\n- ≥ 10 h **wear** time\n- hourly-mean SVM **range ≥ 20** (a real day/night rhythm — rejects flat / constant “dormant” days)\n\n**③ Verdict**\n`valid_days ≥ 3` → **PASS** · within margin → **REVIEW** · else **FAIL**\n\nDaily **%compliance** = wear_hours ÷ expected_wear (16 h)\nWrites `_compliance.json` · `_compliance.xlsx` · `_60s_daily_compliance.csv`\n(per-day: wear / non-wear h · hourly range · within-day SD)","x":0,"y":1180,"width":560,"height":470,"color":"2"},
+
+		{"id":"s-step2","type":"text","text":"## 🌙 Step 2 · Sleep Metrics\n*actigraphy-sleep-metrics · `python -u -m cli read`*\n\n`_60s.csv` → **IS · IV · M10/L5 · periodogram · SRI · PDF**\n- **SRI:** Cole-Kripke on **SVM_sum ÷ epoch_sec** (per-second) → sleep/wake per minute, compared day-to-next-day\n- Outputs copied into the participant folder\n\n> Internals detailed in `actigraphy-pipeline.canvas`","x":0,"y":1690,"width":560,"height":210,"color":"3"},
+
+		{"id":"s-excel","type":"text","text":"## 📗 Workbook + roll-up\n*excel.py*\n\n- Per-item **`_compliance.xlsx`**: Summary + Compliance_PerDay + each Step 2 CSV\n- Appends participant roll-up (`CDxxx_compliance_summary.csv/.xlsx`)","x":0,"y":1940,"width":560,"height":150,"color":"4"},
+
+		{"id":"s-replicate","type":"text","text":"## 📤 Replicate + finalise\n\n- Optionally copy the raw `.bin` into the output tree (only if already hydrated)\n- Cell turns **white**; write `run_summary.json` + `events.jsonl`","x":0,"y":2130,"width":560,"height":150,"color":"6"},
+
+		{"id":"ref-step1","type":"text","text":"## ↗ Step 1 internals\n*actigraphy-epoching*\n\n- **1A** GENEActiv binary reader (header + calibration + page decode)\n- **1B** SVM per sample + 60-s epoch aggregation\n\nSee **`actigraphy-pipeline.canvas`**","x":-780,"y":760,"width":700,"height":210,"color":"3"},
+
+		{"id":"ref-step2","type":"text","text":"## ↗ Step 2 internals\n*actigraphy-sleep-metrics*\n\n- Load → hourly means → day×hour matrix\n- Non-parametric (IS/IV/M10/L5), periodograms, SRI\n\nSee **`actigraphy-pipeline.canvas`**","x":-780,"y":1690,"width":700,"height":210,"color":"3"},
+
+		{"id":"xc-grid","type":"text","text":"## 🟦 Grid state (Panel 1)\ncell = suffix after `CD` (e.g. `011`)\n\n- **grey** — not processed\n- **white** — all expected outputs present\n- **grey + orange border** — partial / new data → needs run\n- **dashed** — no `.bin`","x":-780,"y":70,"width":700,"height":270,"color":"6"},
+
+		{"id":"xc-flow","type":"text","text":"## ⚡ Run control\n*events.py · jobs.py · WebSocket*\n\n- Every step streams live (download %, per-step timers, verbose, verdicts)\n- Button never disabled — a 2nd real run → “pipeline busy”; **dry runs always allowed**\n- **■ STOP** cancels + kills tool subprocess tree · **✕** stops server + children","x":-780,"y":380,"width":700,"height":300,"color":"6"},
+
+		{"id":"out","type":"text","text":"## 🗂️ Output · DASHBOARD TEST DATA\n`…\\CDxxx\\Season\\Actigraph\\`\n\n- `<stem>.bin`  *(raw replica)*\n- `<stem>_60s.csv`  (+ `.metadata.json`)\n- `<stem>_60s_sleep_report.pdf`  ·  `<stem>_60s_report.pdf`\n- `<stem>_60s_{nonparametric,daily,periodogram,sri}.csv`\n- **`<stem>_compliance.json` · `.xlsx` · `_60s_daily_compliance.csv`**","x":780,"y":1900,"width":640,"height":380,"color":"4"},
+
+		{"id":"grp-pipe2","type":"group","x":760,"y":40,"width":680,"height":1000,"color":"2","label":"Pipe 2 · Visualise  —  read-only over the output tree"},
+
+		{"id":"p2-grid","type":"text","text":"## 🟩 Output grid\n*results.panel2_grid*\n\nColoured by **compliance**:\n- **green** = every recording PASS\n- **orange** = some\n- **red** = none","x":780,"y":100,"width":640,"height":230,"color":"2"},
+
+		{"id":"p2-agg","type":"text","text":"## Σ Aggregate\n*results.aggregate*\n\nAcross selected folders: participants · **season datasets** by type (e.g. “3 summer, 2 winter”) · per-device **passed / review / failed** + **mean %compliance** + per-season table","x":780,"y":360,"width":640,"height":250,"color":"2"},
+
+		{"id":"p2-drill","type":"text","text":"## 🔬 Drill-down\n*results.item_measures*\n\nPick a recording → its compliance summary + Step 2 measures (IS · IV · M10/L5 · SRI) + daily compliance + reports","x":780,"y":650,"width":640,"height":250,"color":"2"}
+	],
+	"edges":[
+		{"id":"e-src-disc","fromNode":"src","fromSide":"bottom","toNode":"s-discover","toSide":"top","color":"6","label":"select + run"},
+		{"id":"e-disc-res","fromNode":"s-discover","fromSide":"bottom","toNode":"s-resume","toSide":"top","color":"6"},
+		{"id":"e-res-hyd","fromNode":"s-resume","fromSide":"bottom","toNode":"s-hydrate","toSide":"top","color":"6","label":"incomplete → process"},
+		{"id":"e-hyd-s1","fromNode":"s-hydrate","fromSide":"bottom","toNode":"s-step1","toSide":"top","color":"3"},
+		{"id":"e-s1-rep","fromNode":"s-step1","fromSide":"bottom","toNode":"s-report1","toSide":"top","color":"4","label":"60s CSV"},
+		{"id":"e-rep-comp","fromNode":"s-report1","fromSide":"bottom","toNode":"s-compliance","toSide":"top","color":"2"},
+		{"id":"e-comp-s2","fromNode":"s-compliance","fromSide":"bottom","toNode":"s-step2","toSide":"top","color":"3"},
+		{"id":"e-s2-xl","fromNode":"s-step2","fromSide":"bottom","toNode":"s-excel","toSide":"top","color":"4"},
+		{"id":"e-xl-rep","fromNode":"s-excel","fromSide":"bottom","toNode":"s-replicate","toSide":"top","color":"6"},
+		{"id":"e-xl-out","fromNode":"s-excel","fromSide":"right","toNode":"out","toSide":"left","color":"5","label":"write artifacts"},
+		{"id":"e-ref1","fromNode":"ref-step1","fromSide":"right","toNode":"s-step1","toSide":"left","color":"3","label":"detail"},
+		{"id":"e-ref2","fromNode":"ref-step2","fromSide":"right","toNode":"s-step2","toSide":"left","color":"3","label":"detail"},
+		{"id":"e-out-p2","fromNode":"out","fromSide":"top","toNode":"grp-pipe2","toSide":"bottom","color":"5","label":"Pipe 2 reads output"},
+		{"id":"e-p2-1","fromNode":"p2-grid","fromSide":"bottom","toNode":"p2-agg","toSide":"top","color":"2"},
+		{"id":"e-p2-2","fromNode":"p2-agg","fromSide":"bottom","toNode":"p2-drill","toSide":"top","color":"2"}
+	]
+}
