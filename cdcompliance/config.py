@@ -40,12 +40,15 @@ class ToolsConfig:
     epoching_repo: Path
     # Local repo dir of Step 2 (actigraphy-sleep-metrics).
     sleep_metrics_repo: Path
-    # Interpreter used to launch both tools. Must have numpy/pandas/scipy/
-    # matplotlib (and Step 2's deps) importable.
+    # Local repo dir of the MiEYE luminosity tool (luminosity-metrics).
+    luminosity_repo: Path
+    # Interpreter used to launch the tools. Must have numpy/pandas/scipy/
+    # matplotlib (and each tool's deps) importable.
     python_executable: str = "python"
     # GitHub sources — setup_tools.py fetches the latest from here on install.
     epoching_repo_url: str = "https://github.com/liyang-D/actigraphy-epoching.git"
     sleep_metrics_repo_url: str = "https://github.com/infernalzeus/actigraphy-sleep-metrics.git"
+    luminosity_repo_url: str = "https://github.com/infernalzeus/luminosity-metrics.git"
 
 
 @dataclass
@@ -106,6 +109,33 @@ class ComplianceConfig:
 
 
 @dataclass
+class LuminosityComplianceConfig:
+    """MiEYE luminosity valid-day rule parameters.
+
+    The device is charged regularly, so the charger flag is NOT a wear signal.
+    A day is valid when it shows diurnal variation (daytime melanopic brighter
+    than night by ``min_day_night_ratio``) AND has at least ``min_light_hours`` of
+    light-activity (melanopic >= ``light_floor_lx``); ``expected_light_hours`` ≈ 16
+    is the daily %compliance target. The day/night windows and TAT/TBT thresholds
+    feed the secondary light-adequacy stats (Brown et al. 2022). All soft /
+    calibratable, passed through to the luminosity-metrics CLI which owns the
+    computation.
+    """
+
+    min_valid_days: int = 3
+    review_margin_days: int = 1
+    light_floor_lx: float = 10.0
+    min_light_hours: float = 12.0
+    expected_light_hours: float = 14.0
+    min_day_night_ratio: float = 2.0
+    channel: str = "melanopic"
+    day_window: tuple = (7, 19)
+    night_window: tuple = (23, 6)
+    tat_threshold_lx: float = 250.0
+    tbt_threshold_lx: float = 10.0
+
+
+@dataclass
 class OneDriveConfig:
     poll_interval_seconds: float = 1.0
     stall_timeout_seconds: float = 30.0
@@ -117,6 +147,7 @@ class Config:
     paths: PathsConfig
     tools: ToolsConfig
     compliance: ComplianceConfig = field(default_factory=ComplianceConfig)
+    luminosity: LuminosityComplianceConfig = field(default_factory=LuminosityComplianceConfig)
     onedrive: OneDriveConfig = field(default_factory=OneDriveConfig)
 
     # Run defaults (overridable per run / via CLI).
@@ -126,6 +157,8 @@ class Config:
     copy_bin: bool = True  # replicate the raw .bin into the output tree
     actigraph_bin_glob: str = "*.bin"
     actigraph_folder_name: str = "Actigraph"
+    mieye_folder_name: str = "MiEYE"
+    mieye_input_glob: str = "*-logged.csv"
 
     # Directory (created if absent) for per-run event logs and summaries.
     runs_dir: Path = Path("runs")
@@ -147,6 +180,7 @@ def load_config(config_path: Path) -> Config:
     paths_raw = raw.get("paths", {})
     tools_raw = raw.get("tools", {})
     comp_raw = raw.get("compliance", {})
+    lum_raw = raw.get("luminosity", {})
     od_raw = raw.get("onedrive", {})
 
     paths = PathsConfig(
@@ -156,6 +190,10 @@ def load_config(config_path: Path) -> Config:
     tools = ToolsConfig(
         epoching_repo=_as_path(tools_raw["epoching_repo"], base),
         sleep_metrics_repo=_as_path(tools_raw["sleep_metrics_repo"], base),
+        # Default keeps older configs (written before the MiEYE device) working.
+        luminosity_repo=_as_path(
+            tools_raw.get("luminosity_repo", "tools/luminosity-metrics"), base
+        ),
         python_executable=tools_raw.get("python_executable", "python"),
         epoching_repo_url=tools_raw.get(
             "epoching_repo_url", "https://github.com/liyang-D/actigraphy-epoching.git"
@@ -164,9 +202,16 @@ def load_config(config_path: Path) -> Config:
             "sleep_metrics_repo_url",
             "https://github.com/infernalzeus/actigraphy-sleep-metrics.git",
         ),
+        luminosity_repo_url=tools_raw.get(
+            "luminosity_repo_url",
+            "https://github.com/infernalzeus/luminosity-metrics.git",
+        ),
     )
     compliance = ComplianceConfig(
         **{k: v for k, v in comp_raw.items() if k in _field_names(ComplianceConfig)}
+    )
+    luminosity = LuminosityComplianceConfig(
+        **{k: v for k, v in lum_raw.items() if k in _field_names(LuminosityComplianceConfig)}
     )
     onedrive = OneDriveConfig(
         **{k: v for k, v in od_raw.items() if k in _field_names(OneDriveConfig)}
@@ -177,6 +222,7 @@ def load_config(config_path: Path) -> Config:
         paths=paths,
         tools=tools,
         compliance=compliance,
+        luminosity=luminosity,
         onedrive=onedrive,
         participant=raw.get("participant", "CD011"),
         devices=list(raw.get("devices", [DEVICE_ACTIGRAPH])),
@@ -184,6 +230,8 @@ def load_config(config_path: Path) -> Config:
         copy_bin=bool(raw.get("copy_bin", True)),
         actigraph_bin_glob=raw.get("actigraph_bin_glob", "*.bin"),
         actigraph_folder_name=raw.get("actigraph_folder_name", "Actigraph"),
+        mieye_folder_name=raw.get("mieye_folder_name", "MiEYE"),
+        mieye_input_glob=raw.get("mieye_input_glob", "*-logged.csv"),
         runs_dir=_as_path(runs_dir, base),
     )
 

@@ -21,6 +21,7 @@ from typing import Any, Optional
 
 from cdcompliance import pipeline, tools
 from cdcompliance.config import Config, ResolvedSelection
+from cdcompliance.devices import implemented_devices
 from cdcompliance.events import EventBus
 
 
@@ -146,7 +147,10 @@ class JobManager:
             selection = ResolvedSelection(
                 participant=pid,
                 seasons=None,
-                devices=self.config.devices,
+                # Run every implemented check (matches the grid, which is coloured
+                # by all-device completeness). Already-complete items are skipped,
+                # and a device with no input for this participant is a no-op.
+                devices=implemented_devices(),
                 copy_bin=self.config.copy_bin,
                 dry_run=job.dry_run,
                 force=job.force,

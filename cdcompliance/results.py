@@ -249,13 +249,20 @@ def item_measures(
     out["compliance"] = comp.get("compliance") if comp else None
 
     outputs: list[dict[str, Any]] = []
-    csv_specs = [
-        ("Non-parametric (IS · IV · M10/L5)", f"{epoch_stem}_nonparametric.csv"),
-        ("Per-day M10 / L5", f"{epoch_stem}_daily.csv"),
-        ("Periodogram (14–34 h)", f"{epoch_stem}_periodogram.csv"),
-        ("SRI (sleep regularity)", f"{epoch_stem}_sri.csv"),
-        ("Daily compliance", f"{epoch_stem}_daily_compliance.csv"),
-    ]
+    if device.lower() == "mieye":
+        # Luminosity outputs are named after the light-CSV stem directly.
+        csv_specs = [
+            ("Per-day light metrics", f"{stem}_luminosity_metrics.csv"),
+            ("Daily compliance", f"{stem}_daily_compliance.csv"),
+        ]
+    else:
+        csv_specs = [
+            ("Non-parametric (IS · IV · M10/L5)", f"{epoch_stem}_nonparametric.csv"),
+            ("Per-day M10 / L5", f"{epoch_stem}_daily.csv"),
+            ("Periodogram (14–34 h)", f"{epoch_stem}_periodogram.csv"),
+            ("SRI (sleep regularity)", f"{epoch_stem}_sri.csv"),
+            ("Daily compliance", f"{epoch_stem}_daily_compliance.csv"),
+        ]
     for label, name in csv_specs:
         if (dev_dir / name).exists():
             outputs.append({"label": label, "kind": "csv", "name": name})
@@ -266,6 +273,19 @@ def item_measures(
 
 
 def _device_folder(config: Config, device: str) -> str:
-    if device.lower() == "actigraph":
+    key = device.lower()
+    if key == "actigraph":
         return config.actigraph_folder_name
+    if key == "mieye":
+        return config.mieye_folder_name
+    # Fall back to the registered processor's folder name (correct casing), then
+    # to a capitalised guess for unknown devices.
+    try:
+        from .devices.registry import get_processor
+
+        folder = get_processor(key).folder_name
+        if folder:
+            return folder
+    except Exception:
+        pass
     return device.capitalize()

@@ -134,6 +134,7 @@ def _append_summary(config: Config, item_result) -> None:
     summary_csv = (
         config.paths.output_root / item.participant / f"{item.participant}_compliance_summary.csv"
     )
+    # Common columns shared by every device.
     row = {
         "participant": item.participant,
         "season": item.season,
@@ -143,12 +144,26 @@ def _append_summary(config: Config, item_result) -> None:
         "valid_days": comp.summary.get("valid_days"),
         "total_days": comp.summary.get("total_days"),
         "total_epochs": comp.summary.get("total_epochs"),
-        "svm_mean": comp.summary.get("svm_mean"),
-        "svm_p99": comp.summary.get("svm_p99"),
-        "activity_threshold_svm": comp.parameters.get("activity_threshold_svm"),
+        "pct_compliance_mean": comp.summary.get("pct_compliance_mean"),
         "processed_at": datetime.now().isoformat(timespec="seconds"),
         "output_dir": str(item_result.output_dir) if item_result.output_dir else "",
     }
+    # Device-specific key metrics (kept out of each other's rows so the roll-up
+    # stays meaningful per device).
+    if item.device == "mieye":
+        adequacy = comp.summary.get("light_adequacy") or {}
+        row.update(
+            channel=comp.parameters.get("channel"),
+            day_mean_medi=adequacy.get("day_mean_medi"),
+            night_mean_medi=adequacy.get("night_mean_medi"),
+            tat_min_per_day_mean=adequacy.get("tat_min_per_day_mean"),
+        )
+    else:
+        row.update(
+            svm_mean=comp.summary.get("svm_mean"),
+            svm_p99=comp.summary.get("svm_p99"),
+            activity_threshold_svm=comp.parameters.get("activity_threshold_svm"),
+        )
     try:
         excel_mod.append_participant_summary(summary_csv, row)
     except Exception as exc:  # summary is best-effort

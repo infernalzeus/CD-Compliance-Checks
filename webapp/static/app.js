@@ -390,6 +390,7 @@ function handleEvent(e) {
 
 // ================================================================== PANEL 2
 const viewGrid = new GridController("#grid-view", "#sel-count-view", (sel) => {
+  clearDetail();   // selection changed — drop any report shown for the old folder
   if (sel.length === 1) loadDrilldown(sel[0]);
   else { $("#device-row").innerHTML = ""; $("#measures").innerHTML = `<div class="muted">Select one folder, then pick a device below.</div>`; }
 }).setUrl("/api/panel2/grid");
@@ -445,6 +446,7 @@ function renderAggregate(a) {
 }
 
 function populateDrilldownFromItems(items) {
+  clearDetail();
   const row = $("#device-row");
   row.innerHTML = "";
   if (!items || !items.length) {
@@ -463,6 +465,7 @@ function populateDrilldownFromItems(items) {
 // ---- drilldown: pick folder -> device -> measures
 let drillItems = [];
 async function loadDrilldown(participant) {
+  clearDetail();
   $("#mv-title").textContent = "· " + participant;
   $("#measures").innerHTML = `<div class="muted">loading…</div>`;
   const data = await api(`/api/participant/${encodeURIComponent(participant)}/output-items`);
@@ -479,6 +482,7 @@ async function loadDrilldown(participant) {
 }
 
 async function showMeasures(participant, it) {
+  clearDetail();   // picking a different recording/device resets the report viewer
   $("#measures").innerHTML = `<div class="muted">loading…</div>`;
   const q = new URLSearchParams({ season: it.season, device: it.device, stem: it.stem });
   const m = await api(`/api/participant/${encodeURIComponent(participant)}/measures?${q}`);
@@ -513,6 +517,17 @@ async function showMeasures(participant, it) {
 function outputUrl(participant, it, name) {
   const q = new URLSearchParams({ participant, season: it.season, device: it.device, name });
   return `/api/output-file?${q}`;
+}
+
+function clearDetail() {
+  // Reset the bottom report/measure viewer so a previously-opened report never
+  // lingers after the participant / device selection changes.
+  const title = $("#detail-title");
+  if (title) title.textContent = "Report / measure viewer";
+  const open = $("#detail-open");
+  if (open) open.innerHTML = "";
+  const body = $("#detail-body");
+  if (body) body.innerHTML = `<div class="muted">Pick a recording above, then click a measure or report to view it here.</div>`;
 }
 
 async function openDetail(participant, it, o) {

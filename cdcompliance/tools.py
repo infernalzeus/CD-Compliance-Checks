@@ -220,3 +220,61 @@ def run_step2(config: Config, csv_path: Path, bus: EventBus) -> dict[str, Path]:
     if "report" not in produced:
         bus.log("Step 2 produced no PDF report; continuing.", level="warning")
     return produced
+
+
+# MiEYE luminosity tool output suffixes, keyed by a short logical name.
+LUMINOSITY_SUFFIXES = {
+    "compliance_json": "_compliance.json",
+    "daily": "_daily_compliance.csv",
+    "metrics": "_luminosity_metrics.csv",
+    "report": "_luminosity_report.pdf",
+}
+
+
+def run_luminosity(
+    config: Config, csv_path: Path, output_dir: Path, bus: EventBus
+) -> dict[str, Path]:
+    """MiEYE luminosity tool: light CSV -> metrics + compliance + report PDF.
+
+    The luminosity-metrics CLI writes all outputs straight into ``output_dir``
+    named after the input stem. Compliance thresholds come from the orchestrator's
+    ``luminosity:`` config block and are passed through as CLI flags, so the tool
+    owns the computation while the thresholds stay configurable here. Returns
+    {logical_name: produced_file} for the files that exist (compliance_json is
+    required; the rest are verified best-effort).
+    """
+    csv_path = Path(csv_path)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    lum = config.luminosity
+
+    cmd = _python_cmd(config) + [
+        "cli.py",
+        str(csv_path),
+        "--output", str(output_dir),
+        "--per-day-channel", str(lum.channel),
+        "--min-valid-days", str(lum.min_valid_days),
+        "--review-margin", str(lum.review_margin_days),
+        "--light-floor", str(lum.light_floor_lx),
+        "--min-light-hours", str(lum.min_light_hours),
+        "--expected-light-hours", str(lum.expected_light_hours),
+        "--min-day-night-ratio", str(lum.min_day_night_ratio),
+        "--day-window", str(lum.day_window[0]), str(lum.day_window[1]),
+        "--night-window", str(lum.night_window[0]), str(lum.night_window[1]),
+        "--tat-threshold", str(lum.tat_threshold_lx),
+        "--tbt-threshold", str(lum.tbt_threshold_lx),
+    ]
+    _stream(cmd, config.tools.luminosity_repo, bus, name="luminosity:process")
+
+    stem = csv_path.stem
+    produced: dict[str, Path] = {}
+    for name, suffix in LUMINOSITY_SUFFIXES.items():
+        candidate = output_dir / f"{stem}{suffix}"
+        if candidate.exists():
+            produced[name] = candidate
+    if "compliance_json" not in produced:
+        raise ToolError(
+            f"Luminosity tool finished but compliance JSON not found: "
+            f"{output_dir / (stem + LUMINOSITY_SUFFIXES['compliance_json'])}"
+        )
+    return produced

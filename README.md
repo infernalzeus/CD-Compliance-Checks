@@ -7,8 +7,10 @@ quality/compliance checks, and replicates the checked, processed outputs into a
 dashboard output tree. The core is UI-agnostic: the CLI here and a future web UI
 drive the same engine and consume the same structured progress event stream.
 
-**Implemented today:** Actigraph (GENEActiv `.bin`).
-**Stubbed for later:** Expiwell, Saliva, Cognitron, Qualtrics, MiEye.
+**Implemented today:** Actigraph (GENEActiv `.bin`), MiEYE (M3 light logger).
+**Stubbed for later:** Expiwell, Saliva, Cognitron, Qualtrics.
+
+> **Architecture overview + system flowchart:** [docs/pipeline.md](docs/pipeline.md).
 
 ---
 
@@ -48,23 +50,50 @@ DASHBOARD TEST DATA/<CDxxx>/<Season>/Actigraph/   (all outputs + raw .bin replic
 
 ---
 
+## What it does (MiEYE — light logger)
+
+For each season under a participant, the single `*-logged.csv` in that season's
+`MiEYE` folder (an XLSX saved with a `.csv` extension; **only that sheet is read**):
+
+1. **Download from OneDrive** — the light CSV is small (~3 MB); hydrated with a
+   progress bar like the actigraph flow.
+2. **luminosity-metrics tool** — reads the sheet and produces a report PDF
+   (channel heatmaps, distribution histograms, **daily light dose over the study**,
+   **per-day time-in-zones**, **per-day cumulative exposure**, and **per-day
+   distributions** — each page captioned with the question it answers), per-day
+   light-adequacy metrics, and a valid-day
+   compliance verdict. The device is charged regularly, so the `charger` flag is
+   **not** a wear signal: a valid day needs **diurnal variation** (daytime melanopic
+   well above night) **and ~14 h of light activity** (≥12 h). Daytime/night melanopic EDI,
+   TAT250 and TBT10 are reported as secondary light-adequacy stats.
+3. **Relay** the tool's `_compliance.json` into the run summary + participant
+   roll-up, and surface it in the dashboard exactly like actigraph.
+
+Thresholds are in `config.yaml → luminosity:`. See [docs/pipeline.md](docs/pipeline.md).
+
+---
+
 ## Install
 
 ```bash
 python -m pip install -r requirements.txt   # orchestrator + dashboard deps
-python setup_tools.py                        # clone the Step 1 & 2 tool repos from GitHub
+python setup_tools.py                        # clone the 3 tool repos from GitHub
 #   python setup_tools.py --update           # …and git pull the latest next time
 ```
 
-`setup_tools.py` clones the two standalone tool repos into `tools/` (paths and
-GitHub URLs come from `config.yaml → tools`) and installs each tool's own
-`numpy/pandas/scipy/matplotlib`. They are script repos, not pip packages, so they
-are fetched this way rather than via `requirements.txt`. The interpreter named in
-`tools.python_executable` must be able to run them.
+`setup_tools.py` clones the **three** standalone tool repos into `tools/` (paths
+and GitHub URLs come from `config.yaml → tools`) and installs each tool's own
+`numpy/pandas/scipy/matplotlib`: Step 1 `actigraphy-epoching`, Step 2
+`actigraphy-sleep-metrics`, and the MiEYE `luminosity-metrics` tool. They are
+script repos, not pip packages, so they are fetched this way rather than via
+`requirements.txt`. The interpreter named in `tools.python_executable` must be
+able to run them.
 
-> The **compliance** logic and its thresholds live in this project
-> (`cdcompliance/compliance.py` + `config.yaml`), not in the tool repos — only
-> Step 2's sleep metrics (incl. SRI) live in `actigraphy-sleep-metrics`.
+> Actigraph's **compliance** logic + thresholds live in this project
+> (`cdcompliance/compliance.py` + `config.yaml`); Step 2's sleep metrics (incl.
+> SRI) live in `actigraphy-sleep-metrics`. MiEYE's compliance logic lives in
+> `luminosity-metrics` (so it works standalone) with its thresholds configurable
+> here under `config.yaml → luminosity:`.
 
 ## Configure
 
@@ -180,6 +209,11 @@ DASHBOARD TEST DATA/
             ├── <stem>_60s_{nonparametric,daily,periodogram,sri}.csv
             ├── <stem>_compliance.xlsx            (combined workbook)
             └── <stem>_compliance.json
+        └── MiEYE/
+            ├── <stem>_luminosity_report.pdf      (heatmaps, histograms, per-day pages)
+            ├── <stem>_luminosity_metrics.csv     (per-day light-adequacy metrics)
+            ├── <stem>_daily_compliance.csv       (per-day wear / %compliance)
+            └── <stem>_compliance.json            (verdict + summary)
 ```
 
 ---
@@ -200,7 +234,8 @@ cdcompliance/
 ├── pipeline.py            run() / plan() orchestration
 └── devices/
     ├── base.py            DeviceProcessor interface (+ NotImplemented stub)
-    ├── actigraph.py       the implemented device
+    ├── actigraph.py       Actigraph (GENEActiv .bin)
+    ├── mieye.py           MiEYE (M3 light logger → luminosity-metrics tool)
     └── registry.py        device key → processor (others are pending stubs)
 ```
 

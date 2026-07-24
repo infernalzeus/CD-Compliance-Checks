@@ -17,21 +17,29 @@ tools:
   # elsewhere. Relative paths resolve against this config file.
   epoching_repo: 'tools/actigraphy-epoching'
   sleep_metrics_repo: 'tools/actigraphy-sleep-metrics'
+  luminosity_repo: 'tools/luminosity-metrics'
   # GitHub sources fetched by setup_tools.py.
   epoching_repo_url: 'https://github.com/liyang-D/actigraphy-epoching.git'
   sleep_metrics_repo_url: 'https://github.com/infernalzeus/actigraphy-sleep-metrics.git'
+  luminosity_repo_url: 'https://github.com/infernalzeus/luminosity-metrics.git'
   # Interpreter used to launch both tools. Must have numpy/pandas/scipy/matplotlib
   # (and Step 2's dependencies) importable. Use a full path to pin a specific env.
   python_executable: 'python'
 
 # Default run scope (override per run via CLI flags).
 participant: 'CD011'
-devices: ['actigraph']     # others (expiwell, saliva, cognitron, qualtrics, mieye) are stubs
+devices: ['actigraph']     # also implemented: mieye (light logger). Stubs: expiwell, saliva, cognitron, qualtrics
 seasons: null              # null => all discovered season folders
 copy_bin: true             # replicate the raw ~1.1 GB .bin into the output tree
 
 actigraph_folder_name: 'Actigraph'
 actigraph_bin_glob: '*.bin'
+
+# MiEYE light logger. One CSV per season folder (an XLSX saved with a .csv
+# extension); only that sheet is read. The luminosity-metrics tool computes the
+# metrics, compliance and report — see the `luminosity:` block below.
+mieye_folder_name: 'MiEYE'
+mieye_input_glob: '*-logged.csv'
 
 # Actigraph compliance — wear-validity rule (best-practice):
 #   1. non-wear detection: an epoch is non-wear when >=2 of 3 axis SDs are below
@@ -52,6 +60,29 @@ compliance:
   activity_threshold_svm: 5.0   # fallback only (SVM-only inputs, no axis SDs)
   svm_column: 'SVM_sum'
   time_column: 'Time'
+
+# MiEYE (luminosity) compliance — valid-day rule from the LIGHT signal (the
+# device is charged regularly, so the charger flag is NOT a wear signal):
+#   1. diurnal variation: daytime mean melanopic >= min_day_night_ratio * night
+#      mean (a real day/night rhythm; rejects flat/all-dark "in a drawer" days).
+#   2. light activity: >= min_light_hours of epochs with melanopic >=
+#      light_floor_lx (a full waking day is ~expected_light_hours ≈ 16 h).
+#   3. PASS when valid_days >= min_valid_days (REVIEW within margin, else FAIL).
+# day/night windows + TAT/TBT thresholds drive the secondary light-adequacy
+# stats (mean daytime/night melanopic, minutes above 250 lx, minutes below 10 lx)
+# reported alongside the verdict. All soft/calibratable (Brown et al. 2022).
+luminosity:
+  min_valid_days: 3              # valid days needed to PASS
+  review_margin_days: 1          # within this of the bar => REVIEW instead of FAIL
+  light_floor_lx: 10.0           # melanopic (lx) above which an epoch is "active light"
+  min_light_hours: 12.0          # soft floor of light-activity hours for a valid day
+  expected_light_hours: 14.0     # target waking light hours (~daylight ceiling; %compliance denom)
+  min_day_night_ratio: 2.0       # daytime mean must exceed night mean by this factor
+  channel: 'melanopic'           # primary channel for per-day pages + compliance
+  day_window: [7, 19]            # daytime hours for adequacy metrics
+  night_window: [23, 6]          # night hours (wraps midnight) for adequacy metrics
+  tat_threshold_lx: 250.0        # daytime "bright enough" floor (time-above-threshold)
+  tbt_threshold_lx: 10.0         # night "dark enough" ceiling (time-below-threshold)
 
 # OneDrive Files On-Demand hydration behaviour.
 onedrive:

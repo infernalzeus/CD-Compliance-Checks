@@ -75,8 +75,19 @@ _jobs = JobManager(_config)
 
 
 def _device_folder(device: str) -> str:
-    if device.lower() == "actigraph":
+    key = device.lower()
+    if key == "actigraph":
         return _config.actigraph_folder_name
+    if key == "mieye":
+        return _config.mieye_folder_name
+    try:
+        from cdcompliance.devices import get_processor
+
+        folder = get_processor(key).folder_name
+        if folder:
+            return folder
+    except Exception:
+        pass
     return device.capitalize()
 
 

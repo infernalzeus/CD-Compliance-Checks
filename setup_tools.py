@@ -1,9 +1,10 @@
 #!/usr/bin/env python
-"""Fetch the external Step 1 / Step 2 tool repos from GitHub.
+"""Fetch the external device-tool repos from GitHub.
 
-CD-Compliance-Checks runs two standalone tools as subprocesses:
+CD-Compliance-Checks runs standalone tools as subprocesses:
   - Step 1  actigraphy-epoching        (.bin -> 60-second epoch CSV)
   - Step 2  actigraphy-sleep-metrics    (epoch CSV -> IS/IV/M10/L5/SRI + PDF)
+  - MiEYE   luminosity-metrics          (light CSV -> metrics/compliance + PDF)
 
 They are not Python packages, so they can't go in requirements.txt directly.
 Run this after installing requirements to clone them (or `git pull` the latest)
@@ -39,6 +40,7 @@ def tool_specs(config) -> list[tuple[str, str, Path]]:
     return [
         ("actigraphy-epoching", config.tools.epoching_repo_url, config.tools.epoching_repo),
         ("actigraphy-sleep-metrics", config.tools.sleep_metrics_repo_url, config.tools.sleep_metrics_repo),
+        ("luminosity-metrics", config.tools.luminosity_repo_url, config.tools.luminosity_repo),
     ]
 
 

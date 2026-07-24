@@ -8,6 +8,7 @@ line change here plus a new processor module.
 from __future__ import annotations
 
 from .actigraph import ActigraphProcessor
+from .mieye import MiEyeProcessor
 from .base import DeviceProcessor, NotImplementedDevice
 
 # Folder names as they appear inside each season directory.
@@ -16,11 +17,11 @@ _PENDING = {
     "saliva": "Saliva",
     "cognitron": "Cognitron",
     "qualtrics": "Qualtrics",
-    "mieye": "MiEYE",
 }
 
 _REGISTRY: dict[str, DeviceProcessor] = {
     "actigraph": ActigraphProcessor(),
+    "mieye": MiEyeProcessor(),
 }
 for _key, _folder in _PENDING.items():
     _REGISTRY[_key] = NotImplementedDevice(_key, _folder)

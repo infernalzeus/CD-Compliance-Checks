@@ -33,10 +33,12 @@ from .config import Config
 from .config import ResolvedSelection
 from .discovery import discover, participant_root
 from .events import EventBus
-from .devices import get_processor
+from .devices import get_processor, implemented_devices
 from .models import WorkItem
 
-OUTPUT_STRUCTURE_VERSION = 1
+# Bumped to 2 when MiEYE became an implemented device: the grid + completeness
+# now span every implemented device, not just actigraph.
+OUTPUT_STRUCTURE_VERSION = 2
 
 _CD_RE = re.compile(r"^CD(?P<suffix>.+)$", re.IGNORECASE)
 
@@ -108,7 +110,12 @@ def _discover_items(config: Config, participant: str, devices: list[str]) -> lis
 def participant_status(
     config: Config, participant: str, devices: Optional[list[str]] = None
 ) -> ParticipantStatus:
-    devices = devices or config.devices
+    # The grid represents processing state across EVERY implemented device (not
+    # just config.devices, which is only the CLI's default run scope). This is
+    # what makes a participant with MiEYE data — but no actigraph — show as
+    # "not processed" rather than "no data", and a participant with only one of
+    # its devices done show as "partial".
+    devices = devices or implemented_devices()
     suffix = cd_suffix(participant) or participant
     items = _discover_items(config, participant, devices)
 
@@ -177,7 +184,7 @@ def pending_items(
     config: Config, participants: list[str], devices: Optional[list[str]] = None
 ) -> list[WorkItem]:
     """Processable items across *participants* that are not yet complete."""
-    devices = devices or config.devices
+    devices = devices or implemented_devices()
     pend: list[WorkItem] = []
     for p in participants:
         for it in _discover_items(config, p, devices):

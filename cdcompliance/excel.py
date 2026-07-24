@@ -87,7 +87,14 @@ def append_participant_summary(
 
     if summary_csv.exists():
         existing = pd.read_csv(summary_csv)
-        combined = pd.concat([existing, pd.DataFrame([row])], ignore_index=True)
+        # Devices contribute different columns (actigraph SVM vs mieye light), so
+        # the master legitimately has all-NA columns for some rows; silence the
+        # pandas all-NA concat FutureWarning that this benignly triggers.
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            combined = pd.concat([existing, pd.DataFrame([row])], ignore_index=True)
     else:
         combined = pd.DataFrame([row])
 
