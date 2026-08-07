@@ -124,6 +124,7 @@ class MiEyeProcessor(DeviceProcessor):
                     poll_interval=config.onedrive.poll_interval_seconds,
                     stall_timeout=config.onedrive.stall_timeout_seconds,
                     total_timeout=config.onedrive.total_timeout_seconds,
+                    cancel_event=selection.cancel_event,
                 )
                 produced = tools.run_luminosity(config, csv_path, output_dir, bus)
 
@@ -159,6 +160,14 @@ class MiEyeProcessor(DeviceProcessor):
             result.output_dir = output_dir
             result.finished_at = datetime.now()
             bus.emit("item_done", label=item.label, status=result.status)
+            return result
+
+        except (onedrive.DownloadCancelled, tools.ToolCancelled) as exc:
+            # STOP / shutdown mid-download — cancelled, not failed.
+            result.status = "cancelled"
+            result.error = str(exc)
+            result.finished_at = datetime.now()
+            bus.emit("item_cancelled", label=item.label, reason=str(exc))
             return result
 
         except Exception as exc:  # noqa: BLE001 - report, don't crash the whole run

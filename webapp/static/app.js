@@ -369,6 +369,10 @@ function handleEvent(e) {
       setBadge(e.label, `<span class="verdict ERROR">ERR</span>`);
       logLine(`  ✗ ${e.label}: ${e.error}`, "error");
       break;
+    case "item_cancelled":
+      setBadge(e.label, `<span class="verdict REVIEW">STOP</span>`);
+      logLine(`  ⏹ ${e.label} cancelled: ${e.reason || ""}`, "warning");
+      break;
     case "run_cancelled":
       logLine(`  run cancelled by user`, "warning");
       break;

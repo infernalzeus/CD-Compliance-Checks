@@ -71,6 +71,12 @@ def run(
         if isinstance(selection, RunSelection)
         else selection
     )
+    # Hand the stop flag to the processors so long stages (OneDrive hydration,
+    # 1 GB copies, tool subprocesses) can abort mid-way, not just between items.
+    if cancel_event is not None:
+        resolved.cancel_event = cancel_event
+    else:
+        cancel_event = resolved.cancel_event
 
     started = datetime.now()
     t0 = time.perf_counter()
@@ -79,9 +85,11 @@ def run(
     items = discovery.discover(config, resolved, bus)
     bus.emit("run_start", participant=resolved.participant, n_items=len(items))
 
+    cancelled = False
     for item in items:
         if cancel_event is not None and cancel_event.is_set():
             bus.emit("run_cancelled", participant=resolved.participant)
+            cancelled = True
             break
 
         processor = get_processor(item.device)
@@ -113,6 +121,11 @@ def run(
         # Roll each successfully processed item into the participant summary.
         if item_result.status == "done" and item_result.compliance is not None:
             _append_summary(config, item_result)
+
+    # Cancelling *during* the final item leaves the loop normally, so report it
+    # here too rather than only on the next iteration's guard.
+    if not cancelled and cancel_event is not None and cancel_event.is_set():
+        bus.emit("run_cancelled", participant=resolved.participant)
 
     result.finished_at = datetime.now()
     bus.emit(

@@ -28,6 +28,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from typing import Optional
 
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
@@ -102,9 +103,34 @@ def _safe_output_path(participant: str, season: str, device: str, name: str):
     return target
 
 
+# Set once the server starts shutting down, so open WebSocket handlers stop
+# waiting on their queue and return. Without this, Ctrl+C hung in "Waiting for
+# background tasks to complete" until the browser tab was closed (and dumped a
+# CancelledError traceback from `await queue.get()`).
+_shutting_down = asyncio.Event()
+
+
 @app.on_event("startup")
 async def _startup() -> None:
     _jobs.bind_loop(asyncio.get_running_loop())
+
+
+@app.on_event("shutdown")
+async def _shutdown() -> None:
+    """Ctrl+C / graceful stop: cancel work before the loop is torn down.
+
+    Order matters — flag the jobs first (so an in-flight OneDrive download or
+    tool subprocess is actually interrupted), then release the WebSocket
+    handlers so uvicorn's graceful shutdown has nothing left to wait on.
+    """
+    _shutting_down.set()
+    try:
+        killed = _jobs.stop_all()
+        if killed:
+            print(f"[shutdown] terminated {killed} tool subprocess(es)")
+    except Exception as exc:  # shutdown must never raise
+        print(f"[shutdown] job teardown failed: {exc}")
+    _jobs.release_subscribers()
 
 
 @app.middleware("http")
@@ -261,6 +287,9 @@ async def api_shutdown() -> JSONResponse:
 
     def _stop() -> None:
         time.sleep(0.4)  # let this response flush first
+        # Give a cancelled run a moment to unwind (close the .bin it was
+        # hydrating, delete a partial copy) before pulling the plug.
+        _jobs.wait_idle(timeout=5.0)
         os._exit(0)
 
     threading.Thread(target=_stop, daemon=True).start()
@@ -302,6 +331,23 @@ async def api_measures(pid: str, season: str, device: str, stem: str) -> JSONRes
 # ---------------------------------------------------------------------------
 # WebSocket progress stream
 # ---------------------------------------------------------------------------
+async def _await_disconnect(websocket: WebSocket) -> None:
+    """Return as soon as the socket goes away (client close or server shutdown).
+
+    Uvicorn closes open connections *before* running the lifespan shutdown hook,
+    so this — not the shutdown event — is what lets a streaming handler notice
+    Ctrl+C promptly. Without it the handler sat in `await queue.get()` until the
+    graceful-shutdown timeout expired and cancelled it.
+    """
+    try:
+        while True:
+            message = await websocket.receive()
+            if message.get("type") == "websocket.disconnect":
+                return
+    except (WebSocketDisconnect, RuntimeError):
+        return
+
+
 @app.websocket("/ws/jobs/{job_id}")
 async def ws_job(websocket: WebSocket, job_id: str) -> None:
     await websocket.accept()
@@ -314,14 +360,27 @@ async def ws_job(websocket: WebSocket, job_id: str) -> None:
     queue: asyncio.Queue = asyncio.Queue()
     job.subscribers.append(queue)
     last_seq = 0
+    disconnected = asyncio.ensure_future(_await_disconnect(websocket))
+    getter: Optional[asyncio.Future] = None
     try:
         # Replay backlog first.
         for event in list(job.history):
             await websocket.send_json(event)
             last_seq = max(last_seq, event.get("_seq", 0))
-        # Then stream new events (skipping any already replayed).
-        while True:
-            event = await queue.get()
+        # Then stream new events (skipping any already replayed), racing each
+        # wait against the socket closing so shutdown is never blocked on us.
+        while not _shutting_down.is_set():
+            getter = asyncio.ensure_future(queue.get())
+            done, _ = await asyncio.wait(
+                {getter, disconnected}, return_when=asyncio.FIRST_COMPLETED
+            )
+            if disconnected in done:
+                getter.cancel()
+                break
+            event = getter.result()
+            # `None` is the shutdown sentinel pushed by _shutdown().
+            if event is None:
+                break
             if event.get("_seq", 0) <= last_seq:
                 continue
             last_seq = event["_seq"]
@@ -330,12 +389,22 @@ async def ws_job(websocket: WebSocket, job_id: str) -> None:
                 break
     except WebSocketDisconnect:
         pass
+    except asyncio.CancelledError:
+        # The server is going down and cancelled this handler. Exit quietly —
+        # re-raising just prints an "Exception in ASGI application" traceback.
+        pass
+    except RuntimeError:
+        # Socket already closed underneath us.
+        pass
     finally:
         if queue in job.subscribers:
             job.subscribers.remove(queue)
+        disconnected.cancel()
+        if getter is not None:
+            getter.cancel()
         try:
             await websocket.close()
-        except RuntimeError:
+        except (RuntimeError, asyncio.CancelledError, WebSocketDisconnect):
             pass
 
 

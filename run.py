@@ -26,13 +26,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from cdcompliance import pipeline  # noqa: E402
+from cdcompliance import pipeline, tools  # noqa: E402
 from cdcompliance.config import RunSelection, load_config  # noqa: E402
 from cdcompliance.devices import all_devices, implemented_devices  # noqa: E402
 from cdcompliance.events import make_default_bus  # noqa: E402
@@ -133,6 +134,10 @@ def main(argv: list[str] | None = None) -> int:
         jsonl_path=events_path, verbose=not args.quiet, console=True
     )
 
+    # Ctrl+C sets this, so an in-progress OneDrive hydration or copy aborts
+    # instead of running to completion while the traceback is already printing.
+    cancel_event = threading.Event()
+
     try:
         if args.dry_run:
             plan = pipeline.plan(config, resolved, bus)
@@ -142,12 +147,23 @@ def main(argv: list[str] | None = None) -> int:
             print(f"\nDry-run plan written to: {run_dir / 'plan.json'}")
             return 0
 
-        result = pipeline.run(config, resolved, bus, run_dir=run_dir)
+        result = pipeline.run(
+            config, resolved, bus, run_dir=run_dir, cancel_event=cancel_event
+        )
         counts = result.counts
         print(f"\nRun summary written to: {run_dir / 'run_summary.json'}")
         print(f"Events log: {events_path}")
         # Exit non-zero if anything failed, so schedulers/CI can detect it.
         return 1 if counts.get("failed", 0) else 0
+    except KeyboardInterrupt:
+        cancel_event.set()
+        killed = tools.terminate_all()
+        print(
+            f"\nInterrupted — cancelled the run"
+            + (f" and terminated {killed} tool subprocess(es)." if killed else "."),
+            file=sys.stderr,
+        )
+        return 130  # conventional exit code for SIGINT
     finally:
         for sink in sinks:
             close = getattr(sink, "close", None)

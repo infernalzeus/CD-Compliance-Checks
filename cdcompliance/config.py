@@ -272,3 +272,8 @@ class ResolvedSelection:
     copy_bin: bool
     dry_run: bool
     force: bool = False
+    # threading.Event set when the user presses STOP or the server shuts down.
+    # Device processors pass it to the long-running stages (OneDrive hydration,
+    # large copies) so a run can be interrupted mid-download instead of only
+    # between items. None => not cancellable (plain CLI use).
+    cancel_event: Optional[Any] = None

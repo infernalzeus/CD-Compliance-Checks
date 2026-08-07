@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import threading
+import time
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -104,6 +105,33 @@ class JobManager:
         for job in self.jobs.values():
             job.cancel_event.set()
         return tools.terminate_all()
+
+    def release_subscribers(self) -> None:
+        """Push the shutdown sentinel to every open WebSocket queue.
+
+        Called on server shutdown so handlers blocked in `await queue.get()`
+        return instead of keeping uvicorn's graceful shutdown waiting.
+        """
+        for job in self.jobs.values():
+            for q in list(job.subscribers):
+                try:
+                    q.put_nowait(None)
+                except Exception:
+                    pass
+
+    def wait_idle(self, timeout: float = 5.0) -> bool:
+        """Wait (briefly) for the running job to unwind after a cancel.
+
+        Returns True if no job is still running. Used on shutdown so the process
+        exits after the pipeline has actually stopped rather than while it is
+        still mid-download.
+        """
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if not any(job.status == "running" for job in self.jobs.values()):
+                return True
+            time.sleep(0.1)
+        return not any(job.status == "running" for job in self.jobs.values())
 
     # -- worker --------------------------------------------------------------
     def _run_worker(self) -> None:

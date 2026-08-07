@@ -63,7 +63,7 @@ class ItemResult:
     """Result of processing a single WorkItem end to end."""
 
     item: WorkItem
-    status: str  # "done" | "skipped" | "failed"
+    status: str  # "done" | "skipped" | "failed" | "cancelled"
     output_dir: Optional[Path] = None
     compliance: Optional[ComplianceResult] = None
     artifacts: list[Path] = field(default_factory=list)

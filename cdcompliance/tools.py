@@ -41,6 +41,9 @@ class ToolCancelled(RuntimeError):
 # Registry of live tool subprocesses so a shutdown / STOP can terminate them
 # (otherwise, on Windows, killing the server orphans the running children).
 _ACTIVE_PROCS: set[subprocess.Popen] = set()
+# PIDs we killed ourselves, so `_stream` can report ToolCancelled rather than a
+# misleading "exited with code 1" failure.
+_KILLED_PIDS: set[int] = set()
 _ACTIVE_LOCK = threading.Lock()
 
 
@@ -52,11 +55,14 @@ def _register(proc: subprocess.Popen) -> None:
 def _unregister(proc: subprocess.Popen) -> None:
     with _ACTIVE_LOCK:
         _ACTIVE_PROCS.discard(proc)
+        _KILLED_PIDS.discard(proc.pid)
 
 
 def _kill_proc_tree(proc: subprocess.Popen) -> None:
     if proc.poll() is not None:
         return
+    with _ACTIVE_LOCK:
+        _KILLED_PIDS.add(proc.pid)
     try:
         if _IS_WINDOWS:
             # /T kills the whole tree (the tool may spawn decode workers).
@@ -121,11 +127,15 @@ def _stream(cmd: list[str], cwd: Path, bus: EventBus, name: str) -> None:
                 bus.emit("step_stdout", name=name, line=line)
         proc.wait()
     finally:
+        with _ACTIVE_LOCK:
+            was_killed = proc.pid in _KILLED_PIDS
         _unregister(proc)
 
     seconds = time.perf_counter() - t0
+    if was_killed:
+        # We terminated it (STOP button / shutdown) — not a tool failure.
+        raise ToolCancelled(f"{name} was cancelled.")
     if proc.returncode != 0:
-        # A negative code / typical taskkill code means we terminated it.
         raise ToolError(
             f"{name} exited with code {proc.returncode} "
             f"(command: {' '.join(cmd)}, cwd: {cwd})"

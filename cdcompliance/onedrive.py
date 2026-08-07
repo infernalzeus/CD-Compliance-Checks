@@ -46,6 +46,15 @@ _IS_WINDOWS = sys.platform.startswith("win")
 # slightly different allocated sizes than the logical length.
 _LOCAL_FRACTION = 0.99
 
+
+class DownloadCancelled(RuntimeError):
+    """Raised when a hydration/copy was aborted via its cancel event.
+
+    A 1 GB hydration can run for many minutes; without this the STOP button and
+    server shutdown had nothing to interrupt, so the run kept downloading in the
+    background and the process could only be killed by force.
+    """
+
 # Load kernel32 with use_last_error so ctypes.get_last_error() is reliable after
 # GetCompressedFileSizeW (its INVALID_FILE_SIZE return is ambiguous otherwise).
 if _IS_WINDOWS:
@@ -152,6 +161,7 @@ def ensure_local(
     poll_interval: float = 1.0,
     stall_timeout: float = 30.0,
     total_timeout: float = 3600.0,
+    cancel_event: Optional[threading.Event] = None,
 ) -> None:
     """Ensure *path* is fully downloaded, emitting live download progress.
 
@@ -161,9 +171,16 @@ def ensure_local(
 
     ``stall_timeout`` is accepted for signature compatibility but no longer used —
     the reader drives hydration from the start, so there is nothing to un-stall.
+
+    Pass ``cancel_event`` (the job's stop flag) to make a download abortable:
+    it is checked every poll and stops the reader thread, raising
+    ``DownloadCancelled``.
     """
     path = Path(path)
     logical = os.path.getsize(path)
+
+    if cancel_event is not None and cancel_event.is_set():
+        raise DownloadCancelled(f"Download of {path.name} cancelled before it started.")
 
     if not is_dehydrated(path) and _get_physical_size(path) >= logical * _LOCAL_FRACTION:
         bus.emit("download_start", file=str(path), total_bytes=logical)
@@ -186,14 +203,24 @@ def ensure_local(
             pct = (downloaded / logical * 100.0) if logical else 100.0
             bus.emit("download_progress", file=str(path),
                      downloaded_bytes=downloaded, total_bytes=logical, pct=min(pct, 100.0))
+            if cancel_event is not None and cancel_event.is_set():
+                raise DownloadCancelled(
+                    f"Download of {path.name} cancelled at {pct:.1f}%."
+                )
             if (time.monotonic() - start) > total_timeout:
-                stop.set()
                 raise TimeoutError(
                     f"Timed out after {total_timeout:.0f}s downloading "
                     f"{path.name} ({pct:.1f}%)."
                 )
-            time.sleep(poll_interval)
+            # Sleep on the cancel event (not time.sleep) so a STOP is acted on
+            # immediately instead of after the current poll interval.
+            if cancel_event is not None:
+                cancel_event.wait(poll_interval)
+            else:
+                time.sleep(poll_interval)
     finally:
+        # Always tell the reader thread to stop; it checks `stop` between chunks
+        # so it unwinds within one 4 MB read instead of finishing the whole file.
         stop.set()
         reader.join(timeout=5.0)
 
@@ -210,8 +237,13 @@ def copy_with_progress(
     dst: Path,
     bus: EventBus,
     chunk_size: int = 8 * 1024 * 1024,
+    cancel_event: Optional[threading.Event] = None,
 ) -> Path:
-    """Copy *src* to *dst* emitting copy_progress events. Assumes src is local."""
+    """Copy *src* to *dst* emitting copy_progress events. Assumes src is local.
+
+    A cancelled copy deletes the half-written destination, so a later run never
+    mistakes a truncated ~1 GB replica for a finished one.
+    """
     src = Path(src)
     dst = Path(dst)
     dst.parent.mkdir(parents=True, exist_ok=True)
@@ -219,8 +251,12 @@ def copy_with_progress(
 
     bus.emit("copy_start", src=str(src), dst=str(dst), total_bytes=total)
     copied = 0
+    cancelled = False
     with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
         while True:
+            if cancel_event is not None and cancel_event.is_set():
+                cancelled = True
+                break
             chunk = fsrc.read(chunk_size)
             if not chunk:
                 break
@@ -235,6 +271,12 @@ def copy_with_progress(
                 total_bytes=total,
                 pct=pct,
             )
+    if cancelled:
+        try:
+            dst.unlink()
+        except OSError:
+            pass
+        raise DownloadCancelled(f"Copy of {src.name} cancelled (partial file removed).")
     shutil.copystat(src, dst, follow_symlinks=True)
     bus.emit("copy_done", src=str(src), dst=str(dst))
     return dst

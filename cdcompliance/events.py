@@ -18,7 +18,8 @@ Event shape:
 Known event types (payload keys in parentheses):
     run_start (participant, n_items)
     discovery (participant, seasons, items)
-    item_start / item_skip / item_done / item_error (label, ...)
+    item_start / item_skip / item_done / item_error / item_cancelled (label, ...)
+    run_cancelled (participant)       # STOP pressed / server shutting down
     download_start (file, total_bytes)
     download_progress (file, downloaded_bytes, total_bytes, pct)
     download_done (file, seconds)
@@ -182,6 +183,12 @@ class ConsoleSink:
         elif etype == "item_error":
             self._end_bar()
             self._w(f"    ERROR: {event.get('label')}: {event.get('error')}\n")
+        elif etype == "item_cancelled":
+            self._end_bar()
+            self._w(f"    CANCELLED: {event.get('label')}: {event.get('reason', '')}\n")
+        elif etype == "run_cancelled":
+            self._end_bar()
+            self._w(f"    Run cancelled: {event.get('participant', '')}\n")
         elif etype == "log":
             if self.verbose or event.get("level") in ("warning", "error"):
                 self._end_bar()

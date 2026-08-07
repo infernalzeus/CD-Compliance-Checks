@@ -162,6 +162,7 @@ class ActigraphProcessor(DeviceProcessor):
                     poll_interval=config.onedrive.poll_interval_seconds,
                     stall_timeout=config.onedrive.stall_timeout_seconds,
                     total_timeout=config.onedrive.total_timeout_seconds,
+                    cancel_event=selection.cancel_event,
                 )
                 timings["hydrate"] = time.perf_counter() - t
                 bin_hydrated = True
@@ -225,7 +226,9 @@ class ActigraphProcessor(DeviceProcessor):
                     step2_files = tools.run_step2(config, epoch_csv, bus)
                     for key, src in step2_files.items():
                         dst = output_dir / Path(src).name
-                        onedrive.copy_with_progress(src, dst, bus)
+                        onedrive.copy_with_progress(
+                            src, dst, bus, cancel_event=selection.cancel_event
+                        )
                         step2_local[key] = dst
                         result.artifacts.append(dst)
                 except tools.ToolError as exc:
@@ -269,7 +272,9 @@ class ActigraphProcessor(DeviceProcessor):
                     bus.log("Raw .bin already present in output; skipping copy.")
                     result.artifacts.append(dst_bin)
                 elif bin_hydrated:
-                    onedrive.copy_with_progress(bin_path, dst_bin, bus)
+                    onedrive.copy_with_progress(
+                        bin_path, dst_bin, bus, cancel_event=selection.cancel_event
+                    )
                     result.artifacts.append(dst_bin)
                 else:
                     # Step 1 was reused, so the .bin was never downloaded. Don't
@@ -286,6 +291,17 @@ class ActigraphProcessor(DeviceProcessor):
             result.timings = timings
             result.finished_at = datetime.now()
             bus.emit("item_done", label=item.label, status=result.status)
+            return result
+
+        except (onedrive.DownloadCancelled, tools.ToolCancelled) as exc:
+            # User pressed STOP / the server is shutting down. Not an error —
+            # report it as cancelled so the run summary and UI don't show a
+            # spurious failure.
+            result.status = "cancelled"
+            result.error = str(exc)
+            result.timings = timings
+            result.finished_at = datetime.now()
+            bus.emit("item_cancelled", label=item.label, reason=str(exc))
             return result
 
         except Exception as exc:  # noqa: BLE001 - report, don't crash the whole run
