@@ -129,30 +129,29 @@ def panel2_grid(config: Config) -> list[dict[str, Any]]:
         orange : some are compliant
         empty  : folder present but nothing processed yet
     """
-    root = config.paths.output_root
-    cells: list[dict[str, Any]] = []
-    for name in list_cd_participants(root):
-        items = output_items(config, name)
-        total = len(items)
-        npass = sum(1 for it in items if (it.get("verdict") or "").upper() == "PASS")
-        if total == 0:
-            state = "empty"
-        elif npass == total:
-            state = "green"
-        elif npass == 0:
-            state = "red"
-        else:
-            state = "orange"
-        cells.append(
-            {
-                "participant": name,
-                "suffix": cd_suffix(name) or name,
-                "state": state,
-                "done": npass,       # compliant count
-                "total": total,      # processed recordings
-            }
-        )
-    return cells
+    return [panel2_cell(config, name) for name in list_cd_participants(config.paths.output_root)]
+
+
+def panel2_cell(config: Config, name: str) -> dict[str, Any]:
+    """One Panel-2 grid cell (compliance-coloured) for a participant."""
+    items = output_items(config, name)
+    total = len(items)
+    npass = sum(1 for it in items if (it.get("verdict") or "").upper() == "PASS")
+    if total == 0:
+        state = "empty"
+    elif npass == total:
+        state = "green"
+    elif npass == 0:
+        state = "red"
+    else:
+        state = "orange"
+    return {
+        "participant": name,
+        "suffix": cd_suffix(name) or name,
+        "state": state,
+        "done": npass,       # compliant count
+        "total": total,      # processed recordings
+    }
 
 
 def aggregate(config: Config, participants: list[str]) -> dict[str, Any]:

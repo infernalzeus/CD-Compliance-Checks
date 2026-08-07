@@ -35,7 +35,7 @@ if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
-from fastapi.responses import FileResponse, JSONResponse  # noqa: E402
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 from cdcompliance import manifest, results  # noqa: E402
@@ -170,12 +170,13 @@ async def api_config() -> JSONResponse:
 
 
 @app.get("/api/settings")
-async def api_get_settings() -> JSONResponse:
+def api_get_settings() -> JSONResponse:
+    # sync (threadpool): .exists() checks may touch on-demand OneDrive paths.
     return JSONResponse(_settings_payload())
 
 
 @app.post("/api/settings")
-async def api_set_settings(payload: dict) -> JSONResponse:
+def api_set_settings(payload: dict) -> JSONResponse:
     def _clean(key):
         return (payload.get(key) or "").strip().strip('"')
 
@@ -225,7 +226,7 @@ def _settings_payload() -> dict:
 
 
 @app.get("/api/output-file")
-async def api_output_file(participant: str, season: str, device: str, name: str):
+def api_output_file(participant: str, season: str, device: str, name: str):
     target = _safe_output_path(participant, season, device, name)
     if not target or not target.is_file():
         return JSONResponse({"error": "not found"}, status_code=404)
@@ -233,7 +234,7 @@ async def api_output_file(participant: str, season: str, device: str, name: str)
 
 
 @app.get("/api/output-csv")
-async def api_output_csv(participant: str, season: str, device: str, name: str) -> JSONResponse:
+def api_output_csv(participant: str, season: str, device: str, name: str) -> JSONResponse:
     target = _safe_output_path(participant, season, device, name)
     if not target or not target.is_file():
         return JSONResponse({"error": "not found"}, status_code=404)
@@ -250,19 +251,59 @@ async def api_output_csv(participant: str, season: str, device: str, name: str) 
     })
 
 
+# NOTE: the folder-scanning endpoints below are plain `def` (not `async def`) on
+# purpose. FastAPI runs sync path operations in a threadpool, so a slow scan of a
+# large / on-demand OneDrive tree does NOT block the event loop — the settings
+# panel, paths and static assets stay responsive while the grid loads.
 @app.get("/api/panel1/grid")
-async def api_panel1_grid() -> JSONResponse:
+def api_panel1_grid() -> JSONResponse:
     return JSONResponse({"cells": manifest.source_grid(_config)})
 
 
 @app.get("/api/panel2/grid")
-async def api_panel2_grid() -> JSONResponse:
+def api_panel2_grid() -> JSONResponse:
     # Panel 2 is coloured by compliance (green/red/orange), not processing state.
     return JSONResponse({"cells": results.panel2_grid(_config)})
 
 
+def _grid_stream(which: str):
+    """Yield NDJSON: one 'total' line, one 'cell' per participant, then 'done'.
+
+    Streaming lets the UI fill the grid progressively and show an X / N meter
+    instead of a blank screen while a large OneDrive tree is scanned. Sync
+    generator -> Starlette iterates it in a threadpool (event loop stays free).
+    """
+    root = _config.paths.source_root if which == "source" else _config.paths.output_root
+    try:
+        names = manifest.list_cd_participants(root)
+    except Exception:
+        names = []
+    yield json.dumps({"type": "total", "total": len(names)}) + "\n"
+    for name in names:
+        try:
+            if which == "source":
+                cell = manifest.participant_status(_config, name).to_dict()
+            else:
+                cell = results.panel2_cell(_config, name)
+        except Exception as exc:  # one bad folder must not kill the stream
+            cell = {"participant": name, "suffix": name, "state": "empty",
+                    "done": 0, "total": 0, "error": str(exc)}
+        yield json.dumps({"type": "cell", "cell": cell}) + "\n"
+    yield json.dumps({"type": "done"}) + "\n"
+
+
+@app.get("/api/panel1/grid-stream")
+def api_panel1_grid_stream() -> StreamingResponse:
+    return StreamingResponse(_grid_stream("source"), media_type="application/x-ndjson")
+
+
+@app.get("/api/panel2/grid-stream")
+def api_panel2_grid_stream() -> StreamingResponse:
+    return StreamingResponse(_grid_stream("output"), media_type="application/x-ndjson")
+
+
 @app.get("/api/participant/{pid}/source")
-async def api_source_tree(pid: str) -> JSONResponse:
+def api_source_tree(pid: str) -> JSONResponse:
     return JSONResponse(results.source_tree(_config, pid))
 
 
@@ -313,18 +354,18 @@ async def api_stop(job_id: str) -> JSONResponse:
 
 
 @app.get("/api/participant/{pid}/output-items")
-async def api_output_items(pid: str) -> JSONResponse:
+def api_output_items(pid: str) -> JSONResponse:
     return JSONResponse({"items": results.output_items(_config, pid)})
 
 
 @app.post("/api/panel2/aggregate")
-async def api_aggregate(payload: dict) -> JSONResponse:
+def api_aggregate(payload: dict) -> JSONResponse:
     participants = [p for p in payload.get("participants", []) if p]
     return JSONResponse(results.aggregate(_config, participants))
 
 
 @app.get("/api/participant/{pid}/measures")
-async def api_measures(pid: str, season: str, device: str, stem: str) -> JSONResponse:
+def api_measures(pid: str, season: str, device: str, stem: str) -> JSONResponse:
     return JSONResponse(results.item_measures(_config, pid, season, device, stem))
 
 

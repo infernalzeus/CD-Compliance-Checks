@@ -20,6 +20,34 @@ function el(tag, cls, html) {
   return e;
 }
 
+// ------------------------------------------------------------------ toasts (progress meters)
+function showToast(id, text, pct) {
+  const area = $("#toasts");
+  if (!area) return null;
+  let t = document.getElementById("toast-" + id);
+  if (!t) {
+    t = el("div", "toast");
+    t.id = "toast-" + id;
+    t.innerHTML = `<div class="toast-text"></div><div class="toast-meter"><i></i></div>`;
+    area.appendChild(t);
+  }
+  t.classList.remove("hiding");
+  $(".toast-text", t).textContent = text;
+  $(".toast-meter > i", t).style.width = `${Math.max(0, Math.min(100, pct || 0))}%`;
+  return t;
+}
+const updateToast = showToast;
+function hideToast(id, finalText) {
+  const t = document.getElementById("toast-" + id);
+  if (!t) return;
+  if (finalText) {
+    $(".toast-text", t).textContent = finalText;
+    $(".toast-meter > i", t).style.width = "100%";
+  }
+  t.classList.add("hiding");
+  setTimeout(() => t.remove(), finalText ? 1400 : 200);
+}
+
 // ------------------------------------------------------------------ tabs
 $$(".tab").forEach((t) => t.addEventListener("click", () => {
   $$(".tab").forEach((x) => x.classList.remove("active"));
@@ -45,36 +73,85 @@ class GridController {
     });
   }
 
+  // Stream the grid (NDJSON): fill cells as they arrive + show an X / N toast,
+  // so a slow OneDrive scan shows live progress instead of a blank grid.
   async load(url) {
-    const data = await api(url);
-    this.cells = data.cells || [];
-    this.render();
+    const toastId = this.mount.id;
+    this.cells = [];
+    this.mount.innerHTML = `<div class="grid-msg">scanning folders…</div>`;
+    showToast(toastId, "Scanning folders…", 0);
+    let total = 0, done = 0, cleared = false;
+    const present = new Set();
+    try {
+      const resp = await fetch(url);
+      if (!resp.body || !resp.body.getReader) {           // fallback: no streaming
+        const data = await resp.json();
+        this.cells = data.cells || [];
+        this.render();
+        hideToast(toastId, `Loaded ${this.cells.length} folders`);
+        return;
+      }
+      const reader = resp.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { value, done: rdone } = await reader.read();
+        if (rdone) break;
+        buf += dec.decode(value, { stream: true });
+        let nl;
+        while ((nl = buf.indexOf("\n")) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line) continue;
+          let msg;
+          try { msg = JSON.parse(line); } catch { continue; }
+          if (msg.type === "total") {
+            total = msg.total;
+            updateToast(toastId, `Scanning 0 / ${total}…`, 0);
+            if (!total) this.mount.innerHTML = `<div class="grid-msg">no CD* folders found — check the source path in ⚙</div>`;
+          } else if (msg.type === "cell") {
+            if (!cleared) { this.mount.innerHTML = ""; cleared = true; }
+            this.cells.push(msg.cell);
+            present.add(msg.cell.participant);
+            this.mount.appendChild(this._makeCell(msg.cell));
+            done++;
+            if (total) updateToast(toastId, `Scanning ${done} / ${total}…`, (done / total) * 100);
+          }
+        }
+      }
+      [...this.selected].forEach((p) => { if (!present.has(p)) this.selected.delete(p); });
+      this._updateCount();
+      hideToast(toastId, total ? `Loaded ${done} / ${total} folders` : "No folders found");
+    } catch (e) {
+      hideToast(toastId);
+      this.mount.innerHTML = `<div class="grid-msg">couldn't load folders — check the paths in ⚙</div>`;
+    }
   }
   reload() { if (this._url) this.load(this._url); }
   setUrl(u) { this._url = u; return this; }
 
+  _makeCell(c) {
+    const cell = el("div", `cell ${c.state}`, c.suffix);
+    cell.dataset.participant = c.participant;
+    cell.title = `${c.participant} — ${c.state} (${c.done ?? 0}/${c.total ?? 0})`;
+    if (this.selected.has(c.participant)) cell.classList.add("selected");
+    cell.addEventListener("mousedown", (e) => {
+      e.preventDefault();
+      this.dragging = true;
+      this.dragMode = this.selected.has(c.participant) ? "remove" : "add";
+      this._apply(c.participant, cell);
+    });
+    cell.addEventListener("mouseenter", () => {
+      if (this.dragging) this._apply(c.participant, cell);
+    });
+    return cell;
+  }
+
   render() {
     this.mount.innerHTML = "";
     const present = new Set(this.cells.map((c) => c.participant));
-    // drop selections no longer present
     [...this.selected].forEach((p) => { if (!present.has(p)) this.selected.delete(p); });
-
-    this.cells.forEach((c) => {
-      const cell = el("div", `cell ${c.state}`, c.suffix);
-      cell.dataset.participant = c.participant;
-      cell.title = `${c.participant} — ${c.state} (${c.done ?? 0}/${c.total ?? 0})`;
-      if (this.selected.has(c.participant)) cell.classList.add("selected");
-      cell.addEventListener("mousedown", (e) => {
-        e.preventDefault();
-        this.dragging = true;
-        this.dragMode = this.selected.has(c.participant) ? "remove" : "add";
-        this._apply(c.participant, cell);
-      });
-      cell.addEventListener("mouseenter", () => {
-        if (this.dragging) this._apply(c.participant, cell);
-      });
-      this.mount.appendChild(cell);
-    });
+    this.cells.forEach((c) => this.mount.appendChild(this._makeCell(c)));
     this._updateCount();
   }
 
@@ -95,10 +172,15 @@ let CONFIG = {};
 api("/api/config").then((c) => { CONFIG = c; });
 
 function renderPaths(s) {
-  const warn = (ok) => (ok ? "" : ' <span class="warn">⚠ not found</span>');
+  const row = (label, val, ok) => {
+    if (!val || /unset-(source|output)-root$/.test(val)) {
+      return `<div>${label}: <span class="warn">not set — open ⚙</span></div>`;
+    }
+    return `<div>${label}: ${val}${ok ? "" : ' <span class="warn">⚠ not found</span>'}</div>`;
+  };
   $("#paths").innerHTML =
-    `<div>source: ${s.source_root}${warn(s.source_exists)}</div>` +
-    `<div>output: ${s.output_root}${warn(s.output_exists)}</div>`;
+    row("source", s.source_root, s.source_exists) +
+    row("output", s.output_root, s.output_exists);
 }
 async function loadSettings() {
   const s = await api("/api/settings");
@@ -144,8 +226,8 @@ $("#set-save").addEventListener("click", async () => {
 const runGrid = new GridController("#grid-run", "#sel-count-run", (sel) => {
   if (sel.length === 1) loadSourceTree(sel[0]);
   else $("#filetree").innerHTML = `<div class="muted">Select a single cell to view its staging files.</div>`;
-}).setUrl("/api/panel1/grid");
-runGrid.load("/api/panel1/grid");
+}).setUrl("/api/panel1/grid-stream");
+runGrid.load("/api/panel1/grid-stream");
 
 $("#clear-run").addEventListener("click", () => runGrid.clear());
 
@@ -397,7 +479,7 @@ const viewGrid = new GridController("#grid-view", "#sel-count-view", (sel) => {
   clearDetail();   // selection changed — drop any report shown for the old folder
   if (sel.length === 1) loadDrilldown(sel[0]);
   else { $("#device-row").innerHTML = ""; $("#measures").innerHTML = `<div class="muted">Select one folder, then pick a device below.</div>`; }
-}).setUrl("/api/panel2/grid");
+}).setUrl("/api/panel2/grid-stream");
 
 $("#clear-view").addEventListener("click", () => viewGrid.clear());
 $("#agg-btn").addEventListener("click", runAggregate);

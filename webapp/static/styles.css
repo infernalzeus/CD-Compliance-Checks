@@ -104,6 +104,15 @@ body {
   font-weight: 700; font-size: 10px; cursor: pointer; color: #0c0f14;
   transition: transform .05s ease;
 }
+.grid-msg { grid-column: 1 / -1; color: var(--muted); font-size: 12px; padding: 10px 4px; }
+
+/* ---- toasts / progress meters ---- */
+#toasts { position: fixed; right: 16px; bottom: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
+.toast { background: var(--panel2); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; min-width: 240px; box-shadow: 0 10px 30px rgba(0,0,0,.45); font-size: 12.5px; transition: opacity .2s ease; }
+.toast.hiding { opacity: 0; }
+.toast-text { color: var(--text); margin-bottom: 7px; }
+.toast-meter { height: 6px; background: #0c0e12; border-radius: 5px; overflow: hidden; }
+.toast-meter > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .12s ease; }
 .cell:hover { transform: translateY(-1px); }
 /* Panel 1 — processing state */
 .cell.pending  { background: var(--grey);  color: #e9ecf3; }
