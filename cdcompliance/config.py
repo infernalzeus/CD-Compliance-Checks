@@ -9,6 +9,7 @@ from user input and hands it to the same core.
 from __future__ import annotations
 
 import dataclasses
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -174,27 +175,38 @@ def _as_path(value: Any, base: Path) -> Path:
 def load_config(config_path: Path) -> Config:
     config_path = Path(config_path)
     base = config_path.parent
-    with config_path.open("r", encoding="utf-8") as fh:
-        raw = yaml.safe_load(fh) or {}
+    # Tool repos default to siblings of the project folder: if CD-Compliance-Checks
+    # lives at  <parent>/CD-Compliance-Checks,  the tools go to  <parent>/<tool>.
+    parent = base.parent
 
-    paths_raw = raw.get("paths", {})
-    tools_raw = raw.get("tools", {})
-    comp_raw = raw.get("compliance", {})
-    lum_raw = raw.get("luminosity", {})
-    od_raw = raw.get("onedrive", {})
+    # A missing config.yaml is fine — everything falls back to portable defaults,
+    # so a fresh clone runs on any machine (set the data folders from the ⚙ panel).
+    if config_path.exists():
+        with config_path.open("r", encoding="utf-8") as fh:
+            raw = yaml.safe_load(fh) or {}
+    else:
+        raw = {}
 
+    paths_raw = raw.get("paths") or {}
+    tools_raw = raw.get("tools") or {}
+    comp_raw = raw.get("compliance") or {}
+    lum_raw = raw.get("luminosity") or {}
+    od_raw = raw.get("onedrive") or {}
+
+    # source/output are inherently machine-specific (OneDrive paths); if unset the
+    # app still boots — the grid is empty and the ⚙ panel prompts for them.
     paths = PathsConfig(
-        source_root=_as_path(paths_raw["source_root"], base),
-        output_root=_as_path(paths_raw["output_root"], base),
+        source_root=_as_path(paths_raw.get("source_root") or "unset-source-root", base),
+        output_root=_as_path(paths_raw.get("output_root") or "unset-output-root", base),
     )
     tools = ToolsConfig(
-        epoching_repo=_as_path(tools_raw["epoching_repo"], base),
-        sleep_metrics_repo=_as_path(tools_raw["sleep_metrics_repo"], base),
-        # Default keeps older configs (written before the MiEYE device) working.
-        luminosity_repo=_as_path(
-            tools_raw.get("luminosity_repo", "tools/luminosity-metrics"), base
-        ),
-        python_executable=tools_raw.get("python_executable", "python"),
+        epoching_repo=_as_path(tools_raw.get("epoching_repo") or (parent / "actigraphy-epoching"), base),
+        sleep_metrics_repo=_as_path(tools_raw.get("sleep_metrics_repo") or (parent / "actigraphy-sleep-metrics"), base),
+        luminosity_repo=_as_path(tools_raw.get("luminosity_repo") or (parent / "luminosity-metrics"), base),
+        # Default to the interpreter running the app (sys.executable) so the tools
+        # use the same Python/venv — avoids "python not found" on macOS/Linux where
+        # only `python3` exists. Override in config to pin a specific env.
+        python_executable=tools_raw.get("python_executable") or sys.executable,
         epoching_repo_url=tools_raw.get(
             "epoching_repo_url", "https://github.com/liyang-D/actigraphy-epoching.git"
         ),

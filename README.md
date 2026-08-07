@@ -71,8 +71,8 @@ shows a real light/dark rhythm), and files the results the same way.
 
 | # | What | Why | How to check it's there |
 |---|------|-----|-------------------------|
-| 1 | **Windows 10 or 11** | The OneDrive download detection is Windows-specific | — |
-| 2 | **Python 3.10 or newer** | This program is written in Python | Open a terminal and type `python --version` |
+| 1 | **Windows 10/11 or macOS** | Runs on both; the live OneDrive download-% bar is most accurate on Windows | — |
+| 2 | **Python 3.10 or newer** | This program is written in Python | Type `python --version` (macOS: `python3 --version`) |
 | 3 | **Git** | Used once, to download the three analysis tools | Type `git --version` |
 | 4 | **OneDrive**, signed in and syncing the CHiP-D repository | That's where the data comes from | The folder appears in File Explorer |
 | 5 | **A web browser** (Edge, Chrome, Firefox) | The dashboard is a web page | Already installed |
@@ -92,14 +92,20 @@ People often expect a web dashboard to need extra web tooling. This one doesn't:
 The dashboard runs only on *your* PC (at the address `127.0.0.1`, which means
 "this computer"). Nobody else on the network can see it.
 
-### Opening a terminal on Windows
+### Opening a terminal
 
 Several steps below say "in a terminal". To open one:
 
+**Windows**
 - Press **Windows key**, type `powershell`, press **Enter**.
 - Or: open the project folder in File Explorer, click the address bar, type
   `powershell` and press **Enter** — this opens a terminal already pointed at the
   right folder, which is what you want.
+
+**macOS**
+- Press **Cmd-Space**, type `Terminal`, press **Enter**.
+- Then point it at the project folder: type `cd ` (with a space), drag the project
+  folder onto the window, and press **Enter**.
 
 A terminal is just a window where you type a command and press Enter. Text you
 should type is shown in boxes like this:
@@ -131,7 +137,12 @@ Close and reopen your terminal afterwards.
 ## 3. Installing it, step by step
 
 Open a terminal **in the project folder** (the one containing `run.py`), then run
-these three commands one at a time, waiting for each to finish.
+these two commands one at a time, waiting for each to finish.
+
+> **macOS / Linux:** if `python` isn't found, use `python3` (and `pip3`)
+> everywhere below — nothing else changes. The app works the same on Windows and
+> Mac. (The live OneDrive *download %* bar is most accurate on Windows; on Mac the
+> file is still fetched, just with a simpler progress display.)
 
 **Step 1 — install the Python libraries this program uses:**
 
@@ -143,21 +154,20 @@ This downloads pandas, numpy, openpyxl, FastAPI and uvicorn. It prints a lot of
 text and takes a couple of minutes. Warnings in yellow are normal; only red
 `ERROR` lines matter.
 
-**Step 2 — create your settings file:**
-
-```bash
-copy config.example.yaml config.yaml
-```
-
-**Step 3 — download the three analysis tools:**
+**Step 2 — download the analysis tools:**
 
 ```bash
 python setup_tools.py
 ```
 
-This uses Git to fetch the three tools that do the actual science, into a `tools/`
-folder, and installs what *they* need (numpy, pandas, scipy, matplotlib). It takes
-a few minutes. It ends with `Tool setup complete.`
+This uses Git to fetch the three analysis tools into **sibling folders next to
+this project** — e.g. `actigraphy-epoching`, `actigraphy-sleep-metrics` and
+`luminosity-metrics` sitting beside `CD-Compliance-Checks` — and installs what
+*they* need (numpy, pandas, scipy, matplotlib). It takes a few minutes and ends
+with `Tool setup complete.`
+
+> You do **not** need to create a `config.yaml`. The app runs with sensible
+> defaults; you point it at your data folders from the dashboard (next section).
 
 Later on, to update those tools to their newest versions:
 
