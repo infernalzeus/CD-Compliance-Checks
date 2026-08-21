@@ -128,9 +128,10 @@ class LuminosityComplianceConfig:
 
     min_valid_days: int = 3
     review_margin_days: int = 1
-    light_floor_lx: float = 10.0
-    min_light_hours: float = 12.0
-    expected_light_hours: float = 14.0
+    light_floor_lx: float = 250.0      # daytime adequacy floor (melanopic lx)
+    min_light_hours: float = 10.0      # hours at/above the floor for a valid day
+    expected_light_hours: float = 10.0 # daily %compliance denominator
+    dark_threshold_lx: float = 200.0   # 'dark / rest' boundary (hourly histogram, L windows)
     min_day_night_ratio: float = 2.0
     channel: str = "melanopic"
     day_window: tuple = (7, 19)

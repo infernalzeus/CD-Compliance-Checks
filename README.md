@@ -7,9 +7,9 @@ participant actually wore the device often enough, and writes the reports,
 tables and spreadsheets into a results folder for you. There is a point-and-click
 dashboard, so you never have to type commands once it is set up.
 
-**Devices supported today:** Actigraph (GENEActiv `.bin` wrist recordings) and
-MiEYE (the M3 light logger).
-**Planned:** Expiwell, Saliva, Cognitron, Qualtrics.
+**Devices supported today:** Actigraph (GENEActiv `.bin` wrist recordings),
+MiEYE (the M3 light logger) and Expiwell (experience-sampling surveys).
+**Planned:** Saliva, Cognitron, Qualtrics.
 
 ---
 
@@ -59,9 +59,27 @@ For one Actigraph recording it will:
    summary for that participant.
 7. **Copy the raw recording** into the results folder as an archive (optional).
 
-For a MiEYE light recording it downloads the light CSV, runs the luminosity tool
-(report PDF, per-day light measures, and a wear verdict based on whether the day
-shows a real light/dark rhythm), and files the results the same way.
+For a **MiEYE** light recording it downloads the light CSV, runs the luminosity
+tool (report PDF, per-day light measures, and a wear verdict based on whether the
+day shows a real light/dark rhythm), and files the results the same way.
+
+For an **Expiwell** folder it reads every experience-sampling survey export and
+reports **what the participant actually answered** — item means, how each measure
+moved across the study, and the sleep-diary metrics (time in bed, sleep onset
+latency, wake after sleep onset, total sleep time, sleep efficiency) derived from
+the Consensus Sleep Diary. Its report is a *measures* report: every page is
+titled with the question it answers ("How was their mood?", "How well did they
+sleep?"), not a wall of statistics.
+
+### Devices covered
+
+| Device | What it reads | What you get |
+|---|---|---|
+| **Actigraph** | GENEActiv `.bin` (~1 GB) | Wear compliance, sleep/body-clock metrics, 2 report PDFs |
+| **MiEYE** | M3 light-logger CSV | Light exposure metrics + compliance, report PDF |
+| **Expiwell** | 8 survey CSV exports | Item measures, sleep-diary metrics, question-per-page report |
+
+Saliva, Cognitron and Qualtrics are recognised but not yet implemented.
 
 ---
 
@@ -136,6 +154,23 @@ Close and reopen your terminal afterwards.
 
 ## 3. Installing it, step by step
 
+### The easy way — double-click
+
+If the program is already installed, just double-click:
+
+* **Windows** — `Start CD Dashboard.bat`
+* **macOS** — `Start CD Dashboard.command`
+  *(the first time, macOS may refuse: right-click the file, choose **Open**, then
+  **Open** again — you only do this once)*
+
+The first run sets everything up on its own — it builds a private Python
+environment, installs the libraries, downloads the analysis tools, then starts the
+dashboard and opens your browser. Later runs go straight to the dashboard.
+
+If that works, skip to section 4. The manual steps below do the same thing.
+
+### The manual way
+
 Open a terminal **in the project folder** (the one containing `run.py`), then run
 these two commands one at a time, waiting for each to finish.
 
@@ -209,6 +244,19 @@ any of them.
 ---
 
 ## 5. Using the dashboard
+
+### The start page
+
+The dashboard opens on a **start page** before the main screen. It lists this
+program and each analysis tool, and checks GitHub for newer versions:
+
+* **up to date** — nothing to do
+* **N behind** — press **Update** to pull the newer version
+* **not installed** — type the folder you want it in, then press **Install here**
+
+Nothing starts on its own; press **Open dashboard** when you are ready. The tool
+folders you choose are remembered between sessions.
+
 
 Start it from a terminal in the project folder:
 
@@ -394,6 +442,27 @@ staging/<CDxxx>/<Season>/Actigraph/<stem>.bin   (OneDrive placeholder)
         ▼
 DASHBOARD TEST DATA/<CDxxx>/<Season>/Actigraph/   (all outputs + raw .bin replica)
 ```
+
+---
+
+### Expiwell — reported measures, not a wear rule
+
+Expiwell is an experience-sampling app, so there is no device to wear. The tool
+reports **what the participant answered**:
+
+| Measure | How it is obtained |
+|---|---|
+| Item measures | Every question with a numeric answer: n, mean, SD, median, range. Answers export as text labels ("Very little"), so they are decoded to numbers using each question's own scale legend. |
+| Positive / negative affect | The 1–7 mood grid split into pleasant items (satisfied, relaxed, cheerful, energetic, enthusiastic, calm) and unpleasant items (upset, irritated, listless, down, nervous, bored, anxious), then averaged separately — mixing them would cancel out. |
+| Sleepiness | Karolinska Sleepiness Scale, 1 (extremely alert) – 9 (very sleepy). |
+| Sleep metrics | Derived from the Consensus Sleep Diary: time in bed, sleep onset latency, wake after sleep onset, number of awakenings, total sleep time and sleep efficiency. |
+
+A response rate is still calculated (so the dashboard can colour the grid), but
+the report itself is about the measures.
+
+> **Note.** An Expiwell export contains only *completed* responses — a missed
+> prompt leaves no row at all. The number of prompts expected therefore comes
+> from the configured schedule, not from the file.
 
 ---
 
