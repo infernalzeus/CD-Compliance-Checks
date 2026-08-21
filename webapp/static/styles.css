@@ -29,8 +29,9 @@ body {
   border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10;
 }
 .brand { font-weight: 700; letter-spacing: .3px; display: flex; align-items: center; gap: 10px; }
-.brand .logo { width: 26px; height: 26px; display: block; flex: none; border-radius: 7px;
-  box-shadow: 0 2px 8px rgba(79,140,255,.35); }
+.brand .logo { width: 30px; height: 30px; display: block; flex: none; border-radius: 7px;
+  background: #fff; padding: 2px; object-fit: contain;
+  box-shadow: 0 2px 8px rgba(11,44,145,.35); }
 .tabs { display: flex; gap: 6px; }
 .tab {
   background: transparent; color: var(--muted); border: 1px solid var(--line);
@@ -250,6 +251,7 @@ h3.sub { font-size: 12px; color: var(--muted); text-transform: uppercase; letter
   display: grid; place-items: center; }
 .mark-glow .mark {
   width: 72px; height: 72px; display: block; object-fit: contain;
+  background: #fff; border-radius: 16px; padding: 4px;
   animation: mark-breathe 3.6s ease-in-out infinite;
 }
 @keyframes mark-breathe {

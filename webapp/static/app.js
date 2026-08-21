@@ -829,7 +829,9 @@ loadComponents(true);
       const img = document.createElement("img");
       img.src = src;
       img.alt = "CHIP-D";
-      img.className = node.className;      // keeps .logo / .mark styling
+      // NB: an <svg>'s .className is an SVGAnimatedString, not a string,
+      // so read the attribute to carry .logo / .mark styling across.
+      img.setAttribute("class", node.getAttribute("class") || "");
       node.replaceWith(img);
     });
     const link = document.querySelector("link[rel='icon']");
