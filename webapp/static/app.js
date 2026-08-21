@@ -816,3 +816,25 @@ $("#startup-updateall")?.addEventListener("click", async () => {
 });
 
 loadComponents(true);
+
+
+// ------------------------------------------------------------------ branding
+// The supplied CHIP-D logo is used verbatim when webapp/static/logo.png exists;
+// until then the drawn SVG mark stands in. Nothing here modifies the image.
+(function applyBrandLogo() {
+  const src = "/static/logo.png";
+  const probe = new Image();
+  probe.onload = () => {
+    document.querySelectorAll(".brand .logo, .mark-glow .mark").forEach((node) => {
+      const img = document.createElement("img");
+      img.src = src;
+      img.alt = "CHIP-D";
+      img.className = node.className;      // keeps .logo / .mark styling
+      node.replaceWith(img);
+    });
+    const link = document.querySelector("link[rel='icon']");
+    if (link) link.href = src;             // same image in the browser tab
+  };
+  probe.onerror = () => {};                // keep the fallback mark
+  probe.src = src;
+})();
