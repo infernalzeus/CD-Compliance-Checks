@@ -160,8 +160,22 @@ If the program is already installed, just double-click:
 
 * **Windows** — `Start CD Dashboard.bat`
 * **macOS** — `Start CD Dashboard.command`
-  *(the first time, macOS may refuse: right-click the file, choose **Open**, then
-  **Open** again — you only do this once)*
+
+> **If double-clicking says "permission denied" on macOS**, the file lost its
+> executable flag (that flag does not survive a copy from Windows, a OneDrive
+> sync, or a ZIP download). Start it once with either of these, and after that
+> double-clicking works normally — the app repairs the flag itself on startup:
+>
+> ```bash
+> bash "Start CD Dashboard.command"
+> ```
+> ```bash
+> chmod +x "Start CD Dashboard.command"
+> ```
+>
+> Two other macOS notes: the file must sit **inside the project folder** (next to
+> `serve.py`) — it will not work from `Downloads`; and if macOS says the file is
+> from an unidentified developer, right-click it → **Open** → **Open** once.
 
 The first run sets everything up on its own — it builds a private Python
 environment, installs the libraries, downloads the analysis tools, then starts the

@@ -27,6 +27,29 @@ if str(HERE) not in sys.path:
 GRACEFUL_TIMEOUT = 8
 
 
+def _ensure_launcher_executable() -> None:
+    """On macOS, restore the executable bit on the double-click launcher.
+
+    Finder will only run a .command file that has the executable bit set. That
+    bit does not survive a copy from Windows/NTFS, OneDrive sync, or a ZIP
+    download - which is why `bash "Start CD Dashboard.command"` works (bash reads
+    the file directly) while double-clicking reports "permission denied".
+    Running the app at all is enough evidence that the user trusts the file, so
+    fix it here: after one successful start, double-click works from then on.
+    """
+    if sys.platform != "darwin":
+        return
+    launcher = HERE / "Start CD Dashboard.command"
+    try:
+        if launcher.is_file() and not os.access(launcher, os.X_OK):
+            mode = launcher.stat().st_mode
+            launcher.chmod(mode | 0o111)
+            print(f"[launcher] made '{launcher.name}' executable - "
+                  "you can now start it by double-clicking.")
+    except OSError as exc:  # never block startup over a convenience fix
+        print(f"[launcher] could not set the executable bit: {exc}")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Serve the compliance dashboard.")
     p.add_argument("--host", default="127.0.0.1")
@@ -35,6 +58,8 @@ def main() -> None:
     p.add_argument("--open", action="store_true",
                    help="Open the dashboard in the default browser once it is up.")
     args = p.parse_args()
+
+    _ensure_launcher_executable()
 
     import uvicorn
 
