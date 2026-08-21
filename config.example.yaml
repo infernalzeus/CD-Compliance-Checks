@@ -78,7 +78,7 @@ compliance:
 luminosity:
   min_valid_days: 3              # valid days needed to PASS
   review_margin_days: 1          # within this of the bar => REVIEW instead of FAIL
-  light_floor_lx: 250.0           # daytime adequacy floor (melanopic lx)
+  light_floor_lx: 10.0            # melanopic lx counting as light exposure
   min_light_hours: 10.0           # hours at/above the floor for a valid day
   expected_light_hours: 10.0      # daily %compliance denominator
   dark_threshold_lx: 200.0        # 'dark / rest' boundary (hourly histogram, L windows)

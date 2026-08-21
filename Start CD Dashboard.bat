@@ -1,7 +1,10 @@
 @echo off
 rem ============================================================
 rem  CHiP-D Compliance Dashboard - double-click launcher (Windows)
+rem
+rem  This file must stay INSIDE the project folder, beside serve.py.
 rem  First run sets everything up; later runs just start the app.
+rem  Everything printed here is also written to launcher-log.txt.
 rem ============================================================
 setlocal
 cd /d "%~dp0"
@@ -11,6 +14,9 @@ echo(
 echo   CHiP-D Compliance Dashboard
 echo   ---------------------------
 echo(
+
+if not exist "serve.py" goto :wrongfolder
+if not exist "requirements.txt" goto :wrongfolder
 
 set "VENV=.venv"
 set "PY=%VENV%\Scripts\python.exe"
@@ -32,6 +38,8 @@ if errorlevel 1 (
   "%PY%" -m pip install --quiet --upgrade pip
   "%PY%" -m pip install --quiet -r requirements.txt
   if errorlevel 1 goto :pipfail
+) else (
+  echo [2/3] Libraries already installed.
 )
 
 rem --- 3. Analysis tools ----------------------------------------------------
@@ -39,6 +47,8 @@ if not exist "%VENV%\.tools-ok" (
   echo [3/3] Downloading the analysis tools from GitHub...
   "%PY%" setup_tools.py
   if not errorlevel 1 echo ok> "%VENV%\.tools-ok"
+) else (
+  echo [3/3] Analysis tools already installed.
 )
 
 echo(
@@ -48,6 +58,19 @@ echo(
 "%PY%" serve.py --open
 if errorlevel 1 goto :runfail
 goto :end
+
+:wrongfolder
+echo(
+echo   ERROR: this launcher is not in the CD-Compliance-Checks folder.
+echo(
+echo   It is currently in:
+echo       %CD%
+echo   but serve.py / requirements.txt are not here.
+echo(
+echo   Move this file into the folder containing serve.py and run it there.
+echo(
+pause
+exit /b 1
 
 :nopython
 echo(
