@@ -116,16 +116,15 @@ def status(spec: dict[str, Any], fetch: bool = True) -> dict[str, Any]:
         return out
 
     out["update_available"] = out["behind"] > 0
-    if out["behind"] and out["dirty"]:
-        out["state"] = "behind-dirty"
-        out["message"] = (f"{out['behind']} update(s) available, but there are local "
-                          "changes - update would not be a fast-forward")
-    elif out["behind"]:
+    # NOTE: this dashboard's users are consumers of the tool repos - they run the
+    # code, they never commit to it. Local edits are therefore drift to be
+    # overwritten, not work to protect, so "dirty" is not surfaced as a state and
+    # never blocks an update. (`dirty` is still reported for diagnostics.)
+    if out["behind"]:
         out["state"] = "behind"
-        out["message"] = f"{out['behind']} update(s) available"
-    elif out["dirty"]:
-        out["state"] = "current-dirty"
-        out["message"] = "up to date (local changes present)"
+        out["message"] = (f"{out['behind']} update(s) available"
+                          + (" - updating will replace locally edited files"
+                             if out["dirty"] else ""))
     else:
         out["state"] = "current"
         out["message"] = "up to date"
@@ -143,12 +142,20 @@ def check_all(config: Config, fetch: bool = True) -> list[dict[str, Any]]:
 
 
 def update(config: Config, key: str, keep_local: bool = False) -> dict[str, Any]:
-    """Fast-forward one component to its remote.
+    """Bring one component up to the exact version published on GitHub.
 
-    ``keep_local`` adds ``--autostash``: git shelves uncommitted changes, does the
-    fast-forward, then re-applies them. That is what makes a repo with local edits
-    updatable at all - without it ``pull --ff-only`` simply refuses, and the user
-    is left staring at "2 behind" with no way to act.
+    The people running this dashboard are *users* of the tool repos, not
+    contributors: they never commit, so anything that differs locally is drift
+    (a stray edit, a half-finished download) rather than work worth keeping.
+    A plain ``git pull`` would refuse in that situation and leave them stuck, so
+    the update fetches and then hard-resets to the remote branch, which always
+    succeeds and lands on exactly the published code.
+
+    Untracked files are deliberately left alone - the tools write generated
+    reports into their own folders (e.g. ``outputs/``) and those are the user's
+    results, not part of the program.
+
+    ``keep_local`` is accepted for API compatibility and ignored.
     """
     spec = next((s for s in component_specs(config) if s["key"] == key), None)
     if spec is None:
@@ -157,26 +164,20 @@ def update(config: Config, key: str, keep_local: bool = False) -> dict[str, Any]
     if not (path / ".git").exists():
         return {"ok": False, "error": "not a git checkout", "status": status(spec, False)}
 
-    args = ["pull", "--ff-only"]
-    if keep_local:
-        args.insert(1, "--autostash")
-    ok, out = _git(args, path, timeout=120)
+    fok, fmsg = _git(["fetch", "--quiet"], path, timeout=120)
+    if not fok:
+        return {"ok": False, "error": f"could not reach GitHub ({fmsg[:80]})",
+                "status": status(spec, fetch=False)}
 
+    # Resolve the tracked upstream branch, then match it exactly.
+    uok, upstream = _git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], path)
+    if not uok or not upstream:
+        return {"ok": False, "error": "no upstream branch configured for this checkout",
+                "status": status(spec, fetch=False)}
+
+    ok, out = _git(["reset", "--hard", upstream], path, timeout=120)
     result: dict[str, Any] = {"ok": ok, "log": out, "status": status(spec, fetch=False)}
     if not ok:
-        low = (out or "").lower()
-        if "local changes" in low or "overwritten" in low or "unstaged" in low:
-            result["error"] = (
-                "Local changes in this folder block the update. Use "
-                "'Update (keep my changes)' to shelve and re-apply them."
-            )
-            result["needs_keep_local"] = True
-        elif "diverge" in low or "not possible to fast-forward" in low:
-            result["error"] = (
-                "This checkout has commits the remote does not, so it cannot be "
-                "fast-forwarded. Resolve it in git."
-            )
-        else:
-            result["error"] = out or "git pull failed"
+        result["error"] = out or "could not update this folder"
     result["restart_required"] = ok and key == "cd-compliance-checks"
     return result

@@ -690,13 +690,14 @@ function dismissStartup() {
 function compRow(c) {
   const row = el("div", "comp");
   const stateLabel = {
-    current: "up to date", "current-dirty": "up to date", behind: `${c.behind} behind`,
-    "behind-dirty": `${c.behind} behind`, missing: "not installed", "not-git": "no git repo",
+    current: "up to date",
+    behind: c.behind === 1 ? "1 update" : `${c.behind} updates`,
+    missing: "not installed", "not-git": "no git repo",
     offline: "offline", "no-git": "git missing", "no-upstream": "no remote",
   }[c.state] || c.state;
   const pillClass = c.update_available ? "behind"
-    : (c.state === "current" || c.state === "current-dirty") ? "current"
-    : (c.state === "missing") ? "error" : c.state;
+    : c.state === "current" ? "current"
+    : c.state === "missing" ? "error" : c.state;
 
   const left = el("div");
   left.appendChild(el("div", "c-name", c.name));
@@ -708,14 +709,12 @@ function compRow(c) {
 
   const slot = el("div", "c-actions");
   if (c.update_available) {
-    // A repo that is behind AND has local edits still gets a button: git can
-    // shelve the changes, fast-forward, then put them back (--autostash).
-    const dirty = c.state === "behind-dirty" || c.dirty;
-    const b = el("button", "btn", dirty ? "Update (keep my changes)" : "Update");
-    b.title = dirty
-      ? "Shelve your local changes, update, then re-apply them"
-      : `Fast-forward this repo ${c.behind} commit(s)`;
-    b.addEventListener("click", () => updateComponent(c.key, b, dirty));
+    // Users of this dashboard consume the tool repos; they never contribute to
+    // them. So there is exactly one action - get the published version - and it
+    // always works, whatever state the folder is in.
+    const b = el("button", "btn", "Update");
+    b.title = "Download the latest published version of this tool";
+    b.addEventListener("click", () => updateComponent(c.key, b));
     slot.appendChild(b);
   }
   row.appendChild(slot);
@@ -766,7 +765,7 @@ function compRow(c) {
   return row;
 }
 
-async function updateComponent(key, btn, keepLocal = false) {
+async function updateComponent(key, btn) {
   const row = btn ? btn.closest(".comp") : null;
   const say = (msg, cls) => {
     if (!row) return;
@@ -780,7 +779,7 @@ async function updateComponent(key, btn, keepLocal = false) {
   try {
     const r = await api("/api/components/update", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key, keep_local: keepLocal }),
+      body: JSON.stringify({ key }),
     });
     if (r.ok) {
       const moved = r.status && r.status.commit ? ` → ${r.status.commit}` : "";
@@ -793,13 +792,6 @@ async function updateComponent(key, btn, keepLocal = false) {
     } else {
       say(r.error || "update failed", "err");
       noteResult(key, r.error || "update failed", "err");
-      // Offer the shelve-and-retry path when plain pull was blocked.
-      if (r.needs_keep_local && !keepLocal && btn) {
-        btn.disabled = false;
-        btn.textContent = "Update (keep my changes)";
-        btn.onclick = () => updateComponent(key, btn, true);
-        return;
-      }
     }
   } catch (e) {
     say("update failed — see the terminal", "err");
@@ -841,7 +833,8 @@ async function loadComponents(fetchRemote = true) {
       `“Install here”, or continue without them.`;
   } else if (pending.length) {
     $("#startup-sub").innerHTML =
-      `<b>${pending.length} component(s) have updates available.</b> Update now, or continue.`;
+      `<b>${pending.length} tool(s) have a newer version available.</b> ` +
+      "Press Update to get it, or continue with what you have.";
   } else {
     $("#startup-sub").textContent = "All components are installed and up to date.";
   }
@@ -854,7 +847,7 @@ $("#startup-updateall")?.addEventListener("click", async () => {
   btn.disabled = true; btn.textContent = "Updating…";
   const data = await api("/api/components?fetch=0").catch(() => ({ components: [] }));
   for (const c of (data.components || []).filter((x) => x.update_available)) {
-    await updateComponent(c.key, null, c.state === "behind-dirty" || c.dirty);
+    await updateComponent(c.key, null);
   }
   btn.disabled = false; btn.textContent = "Update all";
 });
