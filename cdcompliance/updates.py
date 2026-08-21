@@ -142,44 +142,41 @@ def check_all(config: Config, fetch: bool = True) -> list[dict[str, Any]]:
     return [status(s, fetch=fetch) for s in component_specs(config)]
 
 
-def update(config: Config, key: str) -> dict[str, Any]:
-    """Fast-forward one component. Returns the refreshed status plus a log."""
+def update(config: Config, key: str, keep_local: bool = False) -> dict[str, Any]:
+    """Fast-forward one component to its remote.
+
+    ``keep_local`` adds ``--autostash``: git shelves uncommitted changes, does the
+    fast-forward, then re-applies them. That is what makes a repo with local edits
+    updatable at all - without it ``pull --ff-only`` simply refuses, and the user
+    is left staring at "2 behind" with no way to act.
+    """
     spec = next((s for s in component_specs(config) if s["key"] == key), None)
     if spec is None:
         return {"ok": False, "error": f"unknown component '{key}'"}
     path = Path(spec["path"])
     if not (path / ".git").exists():
         return {"ok": False, "error": "not a git checkout", "status": status(spec, False)}
-    ok, out = _git(["pull", "--ff-only"], path, timeout=120)
-    result = {"ok": ok, "log": out, "status": status(spec, fetch=False)}
+
+    args = ["pull", "--ff-only"]
+    if keep_local:
+        args.insert(1, "--autostash")
+    ok, out = _git(args, path, timeout=120)
+
+    result: dict[str, Any] = {"ok": ok, "log": out, "status": status(spec, fetch=False)}
     if not ok:
-        result["error"] = out or "git pull failed"
+        low = (out or "").lower()
+        if "local changes" in low or "overwritten" in low or "unstaged" in low:
+            result["error"] = (
+                "Local changes in this folder block the update. Use "
+                "'Update (keep my changes)' to shelve and re-apply them."
+            )
+            result["needs_keep_local"] = True
+        elif "diverge" in low or "not possible to fast-forward" in low:
+            result["error"] = (
+                "This checkout has commits the remote does not, so it cannot be "
+                "fast-forwarded. Resolve it in git."
+            )
+        else:
+            result["error"] = out or "git pull failed"
     result["restart_required"] = ok and key == "cd-compliance-checks"
     return result
-
-def install(config: Config, key: str, path: Optional[str] = None) -> dict[str, Any]:
-    """Clone a component into ``path`` (or its configured folder).
-
-    Used by the start page so a user can choose where each tool repo lives and
-    install it without touching a terminal.
-    """
-    spec = next((s for s in component_specs(config) if s["key"] == key), None)
-    if spec is None:
-        return {"ok": False, "error": f"unknown component '{key}'"}
-    if key == "cd-compliance-checks":
-        return {"ok": False, "error": "the dashboard itself cannot be re-installed here"}
-    target = Path(path).expanduser() if path else Path(spec["path"])
-    url = spec.get("url", "")
-    if not url:
-        return {"ok": False, "error": "no GitHub URL configured for this component"}
-    if (target / ".git").exists():
-        return {"ok": True, "log": "already a git checkout", "status": status(spec, False)}
-    if target.exists() and any(target.iterdir()):
-        return {"ok": False,
-                "error": f"{target} already exists and is not empty - choose an empty folder"}
-    target.parent.mkdir(parents=True, exist_ok=True)
-    ok, out = _git(["clone", url, str(target)], timeout=300)
-    spec = {**spec, "path": target}
-    return {"ok": ok, "log": out, "error": None if ok else (out or "clone failed"),
-            "status": status(spec, fetch=False)}
-

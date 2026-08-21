@@ -192,9 +192,10 @@ def api_components(fetch: int = 1) -> JSONResponse:
 @app.post("/api/components/update")
 def api_component_update(payload: dict) -> JSONResponse:
     key = (payload or {}).get("key", "")
+    keep_local = bool((payload or {}).get("keep_local", False))
     if not key:
         return JSONResponse({"ok": False, "error": "no component key"}, status_code=400)
-    return JSONResponse(updates.update(_config, key))
+    return JSONResponse(updates.update(_config, key, keep_local=keep_local))
 
 
 @app.post("/api/components/install")

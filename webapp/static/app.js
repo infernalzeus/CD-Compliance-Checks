@@ -671,6 +671,14 @@ $("#shutdown").addEventListener("click", async () => {
 // is behind its GitHub remote, and can fast-forward them. Auto-continues when
 // everything is current (or when git/network is unavailable) so it never blocks.
 let startupDismissed = false;
+// Outcome of the last update per component. The list re-renders after an
+// update, so without this the "updated" confirmation would vanish instantly.
+const recentResults = new Map();   // key -> {msg, cls}
+
+function noteResult(key, msg, cls) {
+  recentResults.set(key, { msg, cls });
+  setTimeout(() => { recentResults.delete(key); }, 8000);
+}
 
 function dismissStartup() {
   if (startupDismissed) return;
@@ -698,13 +706,25 @@ function compRow(c) {
   row.appendChild(left);
   row.appendChild(el("span", "c-pill " + pillClass, stateLabel));
 
-  const slot = el("div");
-  if (c.update_available && c.state !== "behind-dirty") {
-    const b = el("button", "btn", "Update");
-    b.addEventListener("click", () => updateComponent(c.key, b));
+  const slot = el("div", "c-actions");
+  if (c.update_available) {
+    // A repo that is behind AND has local edits still gets a button: git can
+    // shelve the changes, fast-forward, then put them back (--autostash).
+    const dirty = c.state === "behind-dirty" || c.dirty;
+    const b = el("button", "btn", dirty ? "Update (keep my changes)" : "Update");
+    b.title = dirty
+      ? "Shelve your local changes, update, then re-apply them"
+      : `Fast-forward this repo ${c.behind} commit(s)`;
+    b.addEventListener("click", () => updateComponent(c.key, b, dirty));
     slot.appendChild(b);
   }
   row.appendChild(slot);
+
+  const past = recentResults.get(c.key);
+  if (past) {
+    const note = el("div", "c-result " + (past.cls || ""), past.msg);
+    row.appendChild(note);
+  }
 
   // The dashboard's own folder is fixed; every tool repo can live anywhere.
   if (c.key !== "cd-compliance-checks") {
@@ -746,20 +766,44 @@ function compRow(c) {
   return row;
 }
 
-async function updateComponent(key, btn) {
+async function updateComponent(key, btn, keepLocal = false) {
+  const row = btn ? btn.closest(".comp") : null;
+  const say = (msg, cls) => {
+    if (!row) return;
+    let note = $(".c-result", row);
+    if (!note) { note = el("div", "c-result"); row.appendChild(note); }
+    note.className = "c-result " + (cls || "");
+    note.textContent = msg;
+  };
   if (btn) { btn.disabled = true; btn.textContent = "Updating…"; }
+  say("updating…");
   try {
     const r = await api("/api/components/update", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ key }),
+      body: JSON.stringify({ key, keep_local: keepLocal }),
     });
-    if (r.restart_required) {
-      $("#startup-sub").innerHTML =
-        "<b>Dashboard updated — restart the app to load the new version.</b>";
+    if (r.ok) {
+      const moved = r.status && r.status.commit ? ` → ${r.status.commit}` : "";
+      say("updated" + moved, "ok");
+      noteResult(key, "updated" + moved, "ok");
+      if (r.restart_required) {
+        $("#startup-sub").innerHTML =
+          "<b>Dashboard updated — restart the app to load the new version.</b>";
+      }
+    } else {
+      say(r.error || "update failed", "err");
+      noteResult(key, r.error || "update failed", "err");
+      // Offer the shelve-and-retry path when plain pull was blocked.
+      if (r.needs_keep_local && !keepLocal && btn) {
+        btn.disabled = false;
+        btn.textContent = "Update (keep my changes)";
+        btn.onclick = () => updateComponent(key, btn, true);
+        return;
+      }
     }
-    if (!r.ok && r.error) $("#startup-sub").textContent = `Update failed: ${r.error}`;
   } catch (e) {
-    $("#startup-sub").textContent = "Update failed — see the terminal for details.";
+    say("update failed — see the terminal", "err");
+    noteResult(key, "update failed — see the terminal", "err");
   }
   await loadComponents(false);
 }
@@ -783,7 +827,7 @@ async function loadComponents(fetchRemote = true) {
 
   const pending = comps.filter((c) => c.update_available);
   const updatable = pending.filter((c) => c.state !== "behind-dirty");
-  $("#startup-updateall").style.display = updatable.length > 1 ? "" : "none";
+  $("#startup-updateall").style.display = pending.length > 1 ? "" : "none";
 
   // Never auto-launch: this is a start page, so the user decides when to enter
   // and can set where each tool lives first.
@@ -809,8 +853,8 @@ $("#startup-updateall")?.addEventListener("click", async () => {
   const btn = $("#startup-updateall");
   btn.disabled = true; btn.textContent = "Updating…";
   const data = await api("/api/components?fetch=0").catch(() => ({ components: [] }));
-  for (const c of (data.components || []).filter((x) => x.update_available && x.state !== "behind-dirty")) {
-    await updateComponent(c.key, null);
+  for (const c of (data.components || []).filter((x) => x.update_available)) {
+    await updateComponent(c.key, null, c.state === "behind-dirty" || c.dirty);
   }
   btn.disabled = false; btn.textContent = "Update all";
 });
