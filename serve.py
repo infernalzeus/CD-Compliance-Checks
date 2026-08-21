@@ -32,9 +32,34 @@ def main() -> None:
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--reload", action="store_true")
+    p.add_argument("--open", action="store_true",
+                   help="Open the dashboard in the default browser once it is up.")
     args = p.parse_args()
 
     import uvicorn
+
+    if args.open:
+        # Wait for the port to accept connections, then open the browser. Doing
+        # this in a thread keeps the server in the foreground (Ctrl+C still works).
+        import socket
+        import threading
+        import time as _time
+        import webbrowser
+
+        def _open_when_ready() -> None:
+            url = f"http://{args.host}:{args.port}"
+            for _ in range(120):  # up to ~30s
+                try:
+                    with socket.create_connection((args.host, args.port), timeout=0.5):
+                        break
+                except OSError:
+                    _time.sleep(0.25)
+            else:
+                return
+            webbrowser.open(url)
+
+        threading.Thread(target=_open_when_ready, daemon=True).start()
+
 
     if args.reload:
         # The reloader supervises its own child process, so the custom signal

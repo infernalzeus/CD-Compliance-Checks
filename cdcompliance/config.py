@@ -43,6 +43,8 @@ class ToolsConfig:
     sleep_metrics_repo: Path
     # Local repo dir of the MiEYE luminosity tool (luminosity-metrics).
     luminosity_repo: Path
+    # Local repo dir of the Expiwell ESM tool (expiwell-metrics).
+    expiwell_repo: Path
     # Interpreter used to launch the tools. Must have numpy/pandas/scipy/
     # matplotlib (and each tool's deps) importable.
     python_executable: str = "python"
@@ -50,6 +52,7 @@ class ToolsConfig:
     epoching_repo_url: str = "https://github.com/liyang-D/actigraphy-epoching.git"
     sleep_metrics_repo_url: str = "https://github.com/infernalzeus/actigraphy-sleep-metrics.git"
     luminosity_repo_url: str = "https://github.com/infernalzeus/luminosity-metrics.git"
+    expiwell_repo_url: str = "https://github.com/infernalzeus/expiwell-metrics.git"
 
 
 @dataclass
@@ -137,6 +140,27 @@ class LuminosityComplianceConfig:
 
 
 @dataclass
+class ExpiwellComplianceConfig:
+    """Expiwell ESM response-rate rule parameters.
+
+    An ExpiWell export lists only *completed* responses, so the denominator (how
+    many prompts were scheduled) is configured, not inferred — ``expected_days``
+    plus the per-survey protocol inside expiwell-metrics (override it per study
+    with ``schedule_file``). A recording PASSES when the pooled response rate
+    across the scored surveys reaches ``min_response_rate_pct``.
+    """
+
+    min_response_rate_pct: float = 70.0
+    review_margin_pct: float = 10.0
+    expected_days: int = 15
+    #: Responses faster than this are flagged as possible straight-lining.
+    min_plausible_duration_sec: float = 5.0
+    #: Optional JSON overriding the per-survey schedule (see the tool's
+    #: survey_schedule.example.json). Empty => the tool's built-in defaults.
+    schedule_file: str = ""
+
+
+@dataclass
 class OneDriveConfig:
     poll_interval_seconds: float = 1.0
     stall_timeout_seconds: float = 30.0
@@ -149,6 +173,7 @@ class Config:
     tools: ToolsConfig
     compliance: ComplianceConfig = field(default_factory=ComplianceConfig)
     luminosity: LuminosityComplianceConfig = field(default_factory=LuminosityComplianceConfig)
+    expiwell: ExpiwellComplianceConfig = field(default_factory=ExpiwellComplianceConfig)
     onedrive: OneDriveConfig = field(default_factory=OneDriveConfig)
 
     # Run defaults (overridable per run / via CLI).
@@ -160,6 +185,8 @@ class Config:
     actigraph_folder_name: str = "Actigraph"
     mieye_folder_name: str = "MiEYE"
     mieye_input_glob: str = "*-logged.csv"
+    expiwell_folder_name: str = "Expiwell"
+    expiwell_input_glob: str = "*Expiwell*.csv"
 
     # Directory (created if absent) for per-run event logs and summaries.
     runs_dir: Path = Path("runs")
@@ -173,7 +200,9 @@ def _as_path(value: Any, base: Path) -> Path:
 
 
 def load_config(config_path: Path) -> Config:
-    config_path = Path(config_path)
+    # Resolve first: sibling tool paths are derived from the config file's
+    # PARENT directory, which is wrong for a relative path like 'config.yaml'.
+    config_path = Path(config_path).expanduser().resolve()
     base = config_path.parent
     # Tool repos default to siblings of the project folder: if CD-Compliance-Checks
     # lives at  <parent>/CD-Compliance-Checks,  the tools go to  <parent>/<tool>.
@@ -191,6 +220,7 @@ def load_config(config_path: Path) -> Config:
     tools_raw = raw.get("tools") or {}
     comp_raw = raw.get("compliance") or {}
     lum_raw = raw.get("luminosity") or {}
+    xpw_raw = raw.get("expiwell") or {}
     od_raw = raw.get("onedrive") or {}
 
     # source/output are inherently machine-specific (OneDrive paths); if unset the
@@ -203,6 +233,7 @@ def load_config(config_path: Path) -> Config:
         epoching_repo=_as_path(tools_raw.get("epoching_repo") or (parent / "actigraphy-epoching"), base),
         sleep_metrics_repo=_as_path(tools_raw.get("sleep_metrics_repo") or (parent / "actigraphy-sleep-metrics"), base),
         luminosity_repo=_as_path(tools_raw.get("luminosity_repo") or (parent / "luminosity-metrics"), base),
+        expiwell_repo=_as_path(tools_raw.get("expiwell_repo") or (parent / "expiwell-metrics"), base),
         # Default to the interpreter running the app (sys.executable) so the tools
         # use the same Python/venv — avoids "python not found" on macOS/Linux where
         # only `python3` exists. Override in config to pin a specific env.
@@ -213,6 +244,10 @@ def load_config(config_path: Path) -> Config:
         sleep_metrics_repo_url=tools_raw.get(
             "sleep_metrics_repo_url",
             "https://github.com/infernalzeus/actigraphy-sleep-metrics.git",
+        ),
+        expiwell_repo_url=tools_raw.get(
+            "expiwell_repo_url",
+            "https://github.com/infernalzeus/expiwell-metrics.git",
         ),
         luminosity_repo_url=tools_raw.get(
             "luminosity_repo_url",
@@ -225,6 +260,9 @@ def load_config(config_path: Path) -> Config:
     luminosity = LuminosityComplianceConfig(
         **{k: v for k, v in lum_raw.items() if k in _field_names(LuminosityComplianceConfig)}
     )
+    expiwell = ExpiwellComplianceConfig(
+        **{k: v for k, v in xpw_raw.items() if k in _field_names(ExpiwellComplianceConfig)}
+    )
     onedrive = OneDriveConfig(
         **{k: v for k, v in od_raw.items() if k in _field_names(OneDriveConfig)}
     )
@@ -235,6 +273,7 @@ def load_config(config_path: Path) -> Config:
         tools=tools,
         compliance=compliance,
         luminosity=luminosity,
+        expiwell=expiwell,
         onedrive=onedrive,
         participant=raw.get("participant", "CD011"),
         devices=list(raw.get("devices", [DEVICE_ACTIGRAPH])),
@@ -244,6 +283,8 @@ def load_config(config_path: Path) -> Config:
         actigraph_folder_name=raw.get("actigraph_folder_name", "Actigraph"),
         mieye_folder_name=raw.get("mieye_folder_name", "MiEYE"),
         mieye_input_glob=raw.get("mieye_input_glob", "*-logged.csv"),
+        expiwell_folder_name=raw.get("expiwell_folder_name", "Expiwell"),
+        expiwell_input_glob=raw.get("expiwell_input_glob", "*Expiwell*.csv"),
         runs_dir=_as_path(runs_dir, base),
     )
 

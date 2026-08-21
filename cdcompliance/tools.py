@@ -288,3 +288,58 @@ def run_luminosity(
             f"{output_dir / (stem + LUMINOSITY_SUFFIXES['compliance_json'])}"
         )
     return produced
+
+# Expiwell ESM tool outputs, named after the participant stem.
+EXPIWELL_SUFFIXES = {
+    "compliance_json": "_compliance.json",
+    "daily": "_daily_compliance.csv",
+    "metrics": "_expiwell_metrics.csv",
+    "responses": "_expiwell_responses.csv",
+    "report": "_expiwell_report.pdf",
+}
+
+
+def run_expiwell(
+    config: Config, folder: Path, output_dir: Path, stem: str, season: str, bus: EventBus
+) -> dict[str, Path]:
+    """Expiwell ESM tool: a folder of survey CSVs -> compliance + metrics + PDF.
+
+    Unlike the other devices the input is a *folder* (one CSV per survey). The
+    expiwell-metrics CLI writes every output into ``output_dir`` named after
+    ``stem``. Thresholds come from the orchestrator's ``expiwell:`` config block
+    and are passed through as flags, so the tool owns the computation while the
+    thresholds stay configurable here.
+    """
+    folder = Path(folder)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    xpw = config.expiwell
+
+    cmd = _python_cmd(config) + [
+        "cli.py",
+        str(folder),
+        "--output", str(output_dir),
+        "--stem", stem,
+        "--season", season or "",
+        "--expected-days", str(xpw.expected_days),
+        "--min-response-rate", str(xpw.min_response_rate_pct),
+        "--review-margin", str(xpw.review_margin_pct),
+        "--min-duration", str(xpw.min_plausible_duration_sec),
+        "--verbose",
+    ]
+    if xpw.schedule_file:
+        cmd += ["--schedule", str(xpw.schedule_file)]
+
+    _stream(cmd, config.tools.expiwell_repo, bus, name="expiwell:process")
+
+    produced: dict[str, Path] = {}
+    for name, suffix in EXPIWELL_SUFFIXES.items():
+        candidate = output_dir / f"{stem}{suffix}"
+        if candidate.exists():
+            produced[name] = candidate
+    if "compliance_json" not in produced:
+        raise ToolError(
+            "Expiwell tool finished but compliance JSON not found: "
+            f"{output_dir / (stem + EXPIWELL_SUFFIXES['compliance_json'])}"
+        )
+    return produced

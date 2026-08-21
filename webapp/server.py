@@ -38,7 +38,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
-from cdcompliance import manifest, results  # noqa: E402
+from cdcompliance import manifest, results, updates  # noqa: E402
 from cdcompliance.config import load_config  # noqa: E402
 from cdcompliance.devices import all_devices, implemented_devices  # noqa: E402
 from webapp.jobs import JobManager  # noqa: E402
@@ -67,6 +67,10 @@ def _apply_runtime_settings() -> None:
             _config.tools.epoching_repo = Path(data["epoching_repo"])
         if data.get("sleep_metrics_repo"):
             _config.tools.sleep_metrics_repo = Path(data["sleep_metrics_repo"])
+        if data.get("luminosity_repo"):
+            _config.tools.luminosity_repo = Path(data["luminosity_repo"])
+        if data.get("expiwell_repo"):
+            _config.tools.expiwell_repo = Path(data["expiwell_repo"])
     except Exception as exc:  # bad settings file must not stop startup
         print(f"[settings] could not load {_SETTINGS_PATH}: {exc}")
 
@@ -169,6 +173,94 @@ async def api_config() -> JSONResponse:
     )
 
 
+# ---------------------------------------------------------------------------
+# Component versions (startup update panel)
+# ---------------------------------------------------------------------------
+@app.get("/api/components")
+def api_components(fetch: int = 1) -> JSONResponse:
+    """Version status of this app and every linked tool repo.
+
+    Sync (threadpool): `git fetch` touches the network and must not block the
+    event loop. `fetch=0` gives the fast, offline, local-only answer.
+    """
+    return JSONResponse({
+        "git": updates.git_available(),
+        "components": updates.check_all(_config, fetch=bool(fetch)),
+    })
+
+
+@app.post("/api/components/update")
+def api_component_update(payload: dict) -> JSONResponse:
+    key = (payload or {}).get("key", "")
+    if not key:
+        return JSONResponse({"ok": False, "error": "no component key"}, status_code=400)
+    return JSONResponse(updates.update(_config, key))
+
+
+@app.post("/api/components/install")
+def api_component_install(payload: dict) -> JSONResponse:
+    """Clone a tool repo into a user-chosen folder, then remember that folder."""
+    key = (payload or {}).get("key", "")
+    path = (payload or {}).get("path", "") or ""
+    if not key:
+        return JSONResponse({"ok": False, "error": "no component key"}, status_code=400)
+    result = updates.install(_config, key, path or None)
+    if result.get("ok") and path:
+        attr = {
+            "actigraphy-epoching": "epoching_repo",
+            "actigraphy-sleep-metrics": "sleep_metrics_repo",
+            "luminosity-metrics": "luminosity_repo",
+            "expiwell-metrics": "expiwell_repo",
+        }.get(key)
+        if attr:
+            setattr(_config.tools, attr, Path(path))
+            _persist_settings()
+    return JSONResponse(result)
+
+
+def _persist_settings() -> bool:
+    try:
+        _SETTINGS_PATH.write_text(
+            json.dumps(
+                {
+                    "source_root": str(_config.paths.source_root),
+                    "output_root": str(_config.paths.output_root),
+                    "epoching_repo": str(_config.tools.epoching_repo),
+                    "sleep_metrics_repo": str(_config.tools.sleep_metrics_repo),
+                    "luminosity_repo": str(_config.tools.luminosity_repo),
+                    "expiwell_repo": str(_config.tools.expiwell_repo),
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        return True
+    except Exception as exc:
+        print(f"[settings] could not persist: {exc}")
+        return False
+
+
+@app.post("/api/components/path")
+def api_component_path(payload: dict) -> JSONResponse:
+    """Point a component at an existing folder without cloning."""
+    key = (payload or {}).get("key", "")
+    path = ((payload or {}).get("path") or "").strip().strip('"')
+    attr = {
+        "actigraphy-epoching": "epoching_repo",
+        "actigraphy-sleep-metrics": "sleep_metrics_repo",
+        "luminosity-metrics": "luminosity_repo",
+        "expiwell-metrics": "expiwell_repo",
+    }.get(key)
+    if not attr or not path:
+        return JSONResponse({"ok": False, "error": "unknown component or empty path"},
+                            status_code=400)
+    setattr(_config.tools, attr, Path(path))
+    saved = _persist_settings()
+    spec = next((x for x in updates.component_specs(_config) if x["key"] == key), None)
+    return JSONResponse({"ok": True, "persisted": saved,
+                         "status": updates.status(spec, fetch=False) if spec else None})
+
+
 @app.get("/api/settings")
 def api_get_settings() -> JSONResponse:
     # sync (threadpool): .exists() checks may touch on-demand OneDrive paths.
@@ -182,6 +274,7 @@ def api_set_settings(payload: dict) -> JSONResponse:
 
     src, out = _clean("source_root"), _clean("output_root")
     e1, e2 = _clean("epoching_repo"), _clean("sleep_metrics_repo")
+    e3, e4 = _clean("luminosity_repo"), _clean("expiwell_repo")
     if src:
         _config.paths.source_root = Path(src)
     if out:
@@ -190,6 +283,10 @@ def api_set_settings(payload: dict) -> JSONResponse:
         _config.tools.epoching_repo = Path(e1)
     if e2:
         _config.tools.sleep_metrics_repo = Path(e2)
+    if e3:
+        _config.tools.luminosity_repo = Path(e3)
+    if e4:
+        _config.tools.expiwell_repo = Path(e4)
     saved = True
     try:
         _SETTINGS_PATH.write_text(
@@ -199,6 +296,8 @@ def api_set_settings(payload: dict) -> JSONResponse:
                     "output_root": str(_config.paths.output_root),
                     "epoching_repo": str(_config.tools.epoching_repo),
                     "sleep_metrics_repo": str(_config.tools.sleep_metrics_repo),
+                    "luminosity_repo": str(_config.tools.luminosity_repo),
+                    "expiwell_repo": str(_config.tools.expiwell_repo),
                 },
                 indent=2,
             ),
@@ -222,6 +321,8 @@ def _settings_payload() -> dict:
         "sleep_metrics_repo": str(_config.tools.sleep_metrics_repo),
         "epoching_exists": _config.tools.epoching_repo.exists(),
         "sleep_metrics_exists": _config.tools.sleep_metrics_repo.exists(),
+        "luminosity_repo": str(_config.tools.luminosity_repo),
+        "expiwell_repo": str(_config.tools.expiwell_repo),
     }
 
 

@@ -14,12 +14,12 @@ into the folders named in config.yaml, and install each tool's own requirements:
     python setup_tools.py            # clone any that are missing
     python setup_tools.py --update   # also `git pull` the ones already present
 
-Override where the repos live from the dashboard's ⚙ settings (or config.yaml:
+Override where the repos live from the dashboard's  settings (or config.yaml:
 tools.epoching_repo / tools.sleep_metrics_repo). GitHub sources come from
 tools.epoching_repo_url / tools.sleep_metrics_repo_url.
 
 Adding a new device tool later (e.g. luminosity): give it a repo + URL in
-config and add an entry to `tool_specs()` below — the same clone/update logic
+config and add an entry to `tool_specs()` below - the same clone/update logic
 then fetches it on install.
 """
 from __future__ import annotations
@@ -41,6 +41,7 @@ def tool_specs(config) -> list[tuple[str, str, Path]]:
         ("actigraphy-epoching", config.tools.epoching_repo_url, config.tools.epoching_repo),
         ("actigraphy-sleep-metrics", config.tools.sleep_metrics_repo_url, config.tools.sleep_metrics_repo),
         ("luminosity-metrics", config.tools.luminosity_repo_url, config.tools.luminosity_repo),
+        ("expiwell-metrics", config.tools.expiwell_repo_url, config.tools.expiwell_repo),
     ]
 
 
@@ -49,21 +50,34 @@ def _run(args: list[str], cwd: Path | None = None) -> int:
     return subprocess.run(args, cwd=str(cwd) if cwd else None).returncode
 
 
-def ensure_repo(name: str, url: str, path: Path, update: bool) -> None:
+def ensure_repo(name: str, url: str, path: Path, update: bool) -> bool:
+    """Clone or update one tool repo. Returns False if it is unusable.
+
+    Never raises: a repo that has not been published yet, a typo'd URL or no
+    network must not stop the other tools (or the launcher) from proceeding.
+    """
     path = Path(path)
+    if not url:
+        print(f"[{name}] no GitHub URL configured - using {path} as-is")
+        return path.exists()
     if (path / ".git").exists():
         if update:
             print(f"[{name}] updating {path}")
             _run(["git", "-C", str(path), "pull", "--ff-only"])
         else:
             print(f"[{name}] already present at {path}  (use --update to git pull)")
-        return
+        return True
     if path.exists() and any(path.iterdir()):
-        print(f"[{name}] SKIP — {path} exists but is not a git repo (won't overwrite)")
-        return
+        print(f"[{name}] using the existing folder at {path} "
+              "(not a git checkout - left untouched)")
+        return True
     print(f"[{name}] cloning {url}\n           -> {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
-    _run(["git", "clone", url, str(path)])
+    if _run(["git", "clone", url, str(path)]) != 0:
+        print(f"[{name}] WARNING: could not clone {url} - skipping this tool. "
+              "The dashboard will still run; that device will report a missing tool.")
+        return False
+    return True
 
 
 def install_requirements(name: str, path: Path, python: str) -> None:
@@ -83,13 +97,21 @@ def main() -> int:
     config = load_config(args.config)
     specs = tool_specs(config)
 
+    ok: dict[str, bool] = {}
     for name, url, path in specs:
-        ensure_repo(name, url, path, args.update)
+        ok[name] = ensure_repo(name, url, path, args.update)
     if not args.no_deps:
         for name, _url, path in specs:
-            install_requirements(name, path, config.tools.python_executable)
+            if ok.get(name):
+                install_requirements(name, path, config.tools.python_executable)
 
-    print("\nTool setup complete. Verify paths in the dashboard ⚙ settings.")
+    missing = [n for n, good in ok.items() if not good]
+    if missing:
+        print("")
+        print("NOT AVAILABLE: " + ", ".join(missing))
+        print("The dashboard still runs; those devices report a missing tool.")
+
+    print("\nTool setup complete. Verify paths in the dashboard settings panel.")
     return 0
 
 

@@ -4,17 +4,24 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CHiP-D · Compliance Dashboard</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='15' fill='%234f8cff'/%3E%3Cpath d='M39 15a17 17 0 1 0 11 30A14 14 0 1 1 39 15Z' fill='%23eaf3ff'/%3E%3Ccircle cx='45' cy='23' r='2.6' fill='%23eaf3ff'/%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2064%2064%27%3E%3Crect%20width%3D%2764%27%20height%3D%2764%27%20rx%3D%2713%27%20fill%3D%27%23fff%27%2F%3E%3Cpath%20fill%3D%27%230B2C91%27%20d%3D%27M33%204C19%204%208%2014.5%208%2028c0%207.5%202.6%2012.6%206%2016.6%201.5%201.7%202%202.8%202%204.6V60h23v-7.6c0-2.6%201.5-4%204-5.2%203.2-1.5%204-3.6%202.4-5.7l-3.6-4.8c-.9-1.2-.8-2%20.3-2.9l4.6-3.7c1.5-1.2%201.5-2.8%200-4l-4.2-3.4C41.6%2012.6%2039.5%204%2033%204Z%27%2F%3E%3Cpath%20fill%3D%27%23fff%27%20d%3D%27M26.4%2014.1a13%2013%200%201%200%2013.2%2018.8%2011.5%2011.5%200%201%201-13.2-18.8Z%27%2F%3E%3Cg%20stroke%3D%27%23fff%27%20stroke-width%3D%272.3%27%20stroke-linecap%3D%27round%27%20fill%3D%27none%27%3E%3Cpath%20d%3D%27M33.6%2026.6V19.2%27%2F%3E%3Cpath%20d%3D%27M33.6%2026.6l4.3%202.7%27%2F%3E%3C%2Fg%3E%3Ccircle%20cx%3D%2733.6%27%20cy%3D%2726.6%27%20r%3D%271.7%27%20fill%3D%27%23fff%27%2F%3E%3C%2Fsvg%3E" />
   <link rel="stylesheet" href="/static/styles.css" />
 </head>
 <body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="chipd-mark" viewBox="0 0 64 64">
+      <path class="mk-head" fill="#0B2C91" d="M33 4C19 4 8 14.5 8 28c0 7.5 2.6 12.6 6 16.6 1.5 1.7 2 2.8 2 4.6V60h23v-7.6c0-2.6 1.5-4 4-5.2 3.2-1.5 4-3.6 2.4-5.7l-3.6-4.8c-.9-1.2-.8-2 .3-2.9l4.6-3.7c1.5-1.2 1.5-2.8 0-4l-4.2-3.4C41.6 12.6 39.5 4 33 4Z"/>
+      <path class="mk-moon" fill="#fff" d="M26.4 14.1a13 13 0 1 0 13.2 18.8 11.5 11.5 0 1 1-13.2-18.8Z"/>
+      <g class="mk-hands" stroke="#fff" stroke-width="2.3" stroke-linecap="round" fill="none">
+        <path d="M33.6 26.6V19.2"/>
+        <path d="M33.6 26.6l4.3 2.7"/>
+      </g>
+      <circle class="mk-pin" cx="33.6" cy="26.6" r="1.7" fill="#fff"/>
+    </symbol>
+  </svg>
   <header class="topbar">
     <div class="brand">
-      <svg class="logo" viewBox="0 0 64 64" aria-hidden="true">
-        <rect width="64" height="64" rx="15" fill="#4f8cff" />
-        <path d="M39 15a17 17 0 1 0 11 30A14 14 0 1 1 39 15Z" fill="#eaf3ff" />
-        <circle cx="45" cy="23" r="2.6" fill="#eaf3ff" />
-      </svg>
+      <svg class="logo" aria-hidden="true"><use href="#chipd-mark"/></svg>
       <span>CHiP-D · Compliance Dashboard</span>
     </div>
     <nav class="tabs">
@@ -135,6 +142,27 @@
       </div>
     </section>
   </main>
+
+  <!-- Startup: component / update check, shown before the dashboard -->
+  <div class="startup" id="startup">
+    <div class="startup-box">
+      <div class="startup-head">
+        <div class="mark-glow">
+          <svg class="mark" aria-hidden="true"><use href="#chipd-mark"/></svg>
+        </div>
+        <div>
+          <h2>CHiP-D Compliance Dashboard</h2>
+          <p class="startup-sub" id="startup-sub">Checking components&hellip;</p>
+        </div>
+      </div>
+      <div class="comp-list" id="comp-list"></div>
+      <div class="startup-actions">
+        <button class="btn ghost" id="startup-recheck">Re-check</button>
+        <button class="btn" id="startup-updateall" style="display:none">Update all</button>
+        <button class="btn primary" id="startup-continue">Open dashboard &rarr;</button>
+      </div>
+    </div>
+  </div>
 
   <div id="toasts"></div>
 

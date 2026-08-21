@@ -665,3 +665,154 @@ $("#shutdown").addEventListener("click", async () => {
     '<div style="padding:40px;font:16px system-ui;color:#8b94a7">' +
     "Server stopped. You can close this tab.</div>";
 });
+
+// ------------------------------------------------------------------ startup / update panel
+// Shown before the dashboard: reports whether this app and each linked tool repo
+// is behind its GitHub remote, and can fast-forward them. Auto-continues when
+// everything is current (or when git/network is unavailable) so it never blocks.
+let startupDismissed = false;
+
+function dismissStartup() {
+  if (startupDismissed) return;
+  startupDismissed = true;
+  const el0 = $("#startup");
+  if (el0) el0.classList.add("hidden");
+}
+
+function compRow(c) {
+  const row = el("div", "comp");
+  const stateLabel = {
+    current: "up to date", "current-dirty": "up to date", behind: `${c.behind} behind`,
+    "behind-dirty": `${c.behind} behind`, missing: "not installed", "not-git": "no git repo",
+    offline: "offline", "no-git": "git missing", "no-upstream": "no remote",
+  }[c.state] || c.state;
+  const pillClass = c.update_available ? "behind"
+    : (c.state === "current" || c.state === "current-dirty") ? "current"
+    : (c.state === "missing") ? "error" : c.state;
+
+  const left = el("div");
+  left.appendChild(el("div", "c-name", c.name));
+  left.appendChild(el("div", "c-role",
+    `${c.role || ""}${c.commit ? " · " + c.commit : ""}${c.branch ? " (" + c.branch + ")" : ""}`));
+  if (c.message) left.appendChild(el("div", "c-msg", c.message));
+  row.appendChild(left);
+  row.appendChild(el("span", "c-pill " + pillClass, stateLabel));
+
+  const slot = el("div");
+  if (c.update_available && c.state !== "behind-dirty") {
+    const b = el("button", "btn", "Update");
+    b.addEventListener("click", () => updateComponent(c.key, b));
+    slot.appendChild(b);
+  }
+  row.appendChild(slot);
+
+  // The dashboard's own folder is fixed; every tool repo can live anywhere.
+  if (c.key !== "cd-compliance-checks") {
+    const pathRow = el("div", "comp-path");
+    const input = el("input");
+    input.type = "text"; input.spellcheck = false;
+    input.value = c.path || "";
+    input.title = "Folder this tool lives in";
+    pathRow.appendChild(input);
+
+    const use = el("button", "btn ghost", "Use folder");
+    use.title = "Point the dashboard at this existing folder";
+    use.addEventListener("click", async () => {
+      use.disabled = true; use.textContent = "Saving…";
+      await api("/api/components/path", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: c.key, path: input.value }),
+      }).catch(() => null);
+      await loadComponents(false);
+    });
+    pathRow.appendChild(use);
+
+    if (c.state === "missing" || c.state === "not-git") {
+      const inst = el("button", "btn", "Install here");
+      inst.title = "Download this tool from GitHub into the folder shown";
+      inst.addEventListener("click", async () => {
+        inst.disabled = true; inst.textContent = "Installing…";
+        const r = await api("/api/components/install", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key: c.key, path: input.value }),
+        }).catch(() => ({ ok: false, error: "request failed" }));
+        if (!r.ok) $("#startup-sub").textContent = `${c.name}: ${r.error || "install failed"}`;
+        await loadComponents(false);
+      });
+      pathRow.appendChild(inst);
+    }
+    row.appendChild(pathRow);
+  }
+  return row;
+}
+
+async function updateComponent(key, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = "Updating…"; }
+  try {
+    const r = await api("/api/components/update", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key }),
+    });
+    if (r.restart_required) {
+      $("#startup-sub").innerHTML =
+        "<b>Dashboard updated — restart the app to load the new version.</b>";
+    }
+    if (!r.ok && r.error) $("#startup-sub").textContent = `Update failed: ${r.error}`;
+  } catch (e) {
+    $("#startup-sub").textContent = "Update failed — see the terminal for details.";
+  }
+  await loadComponents(false);
+}
+
+async function loadComponents(fetchRemote = true) {
+  const list = $("#comp-list");
+  if (!list) return;
+  list.innerHTML = `<div class="muted" style="padding:8px">checking…</div>`;
+  let data;
+  try {
+    data = await api(`/api/components?fetch=${fetchRemote ? 1 : 0}`);
+  } catch (e) {
+    $("#startup-sub").textContent =
+      "Could not check versions (offline). The dashboard still works.";
+    list.innerHTML = "";
+    return;
+  }
+  const comps = data.components || [];
+  list.innerHTML = "";
+  comps.forEach((c) => list.appendChild(compRow(c)));
+
+  const pending = comps.filter((c) => c.update_available);
+  const updatable = pending.filter((c) => c.state !== "behind-dirty");
+  $("#startup-updateall").style.display = updatable.length > 1 ? "" : "none";
+
+  // Never auto-launch: this is a start page, so the user decides when to enter
+  // and can set where each tool lives first.
+  const missing = comps.filter((c) => c.state === "missing" || c.state === "not-git");
+  if (!data.git) {
+    $("#startup-sub").textContent =
+      "git is not installed, so versions cannot be checked. You can still use the dashboard.";
+  } else if (missing.length) {
+    $("#startup-sub").innerHTML =
+      `<b>${missing.length} tool(s) are not installed.</b> Choose a folder and press ` +
+      `“Install here”, or continue without them.`;
+  } else if (pending.length) {
+    $("#startup-sub").innerHTML =
+      `<b>${pending.length} component(s) have updates available.</b> Update now, or continue.`;
+  } else {
+    $("#startup-sub").textContent = "All components are installed and up to date.";
+  }
+}
+
+$("#startup-continue")?.addEventListener("click", dismissStartup);
+$("#startup-recheck")?.addEventListener("click", () => loadComponents(true));
+$("#startup-updateall")?.addEventListener("click", async () => {
+  const btn = $("#startup-updateall");
+  btn.disabled = true; btn.textContent = "Updating…";
+  const data = await api("/api/components?fetch=0").catch(() => ({ components: [] }));
+  for (const c of (data.components || []).filter((x) => x.update_available && x.state !== "behind-dirty")) {
+    await updateComponent(c.key, null);
+  }
+  btn.disabled = false; btn.textContent = "Update all";
+});
+
+loadComponents(true);
