@@ -48,6 +48,11 @@ class MiEyeProcessor(DeviceProcessor):
             return []
         sheets = sorted(device_dir.glob(config.mieye_input_glob))
         if not sheets:
+            # The logger's own export is named "...-download.csv"; the convention is
+            # to rename it "-logged.csv". The content is identical, so if nobody has
+            # renamed it yet, process it anyway (the naming check still flags it).
+            sheets = sorted(device_dir.glob("*-download.csv"))
+        if not sheets:
             # Folder present but no logged CSV — record a no-input item so the run
             # summary shows it was seen and skipped.
             return [
@@ -56,7 +61,12 @@ class MiEyeProcessor(DeviceProcessor):
                     source_dir=device_dir, input_path=None, output_dir=output_dir,
                 )
             ]
-        # A season folder holds a single light log; take the first if several.
+        # A season folder should hold one light log. If there are several (a test
+        # file uploaded into the wrong participant happens), prefer one whose name
+        # carries THIS participant's ID - never let alphabetical order decide which
+        # participant's light data is processed.
+        own = [p for p in sheets if participant.upper() in p.name.upper()]
+        sheets = own + [p for p in sheets if p not in own]
         return [
             WorkItem(
                 participant=participant, season=season, device=self.name,

@@ -60,9 +60,7 @@
       <div class="panel-head">
         <h2>Source · WT OneDrive staging</h2>
         <div class="controls">
-          <label class="chk"><input type="checkbox" id="dry-run" /> dry run</label>
-          <label class="chk"><input type="checkbox" id="force-run" /> force reprocess</label>
-          <label class="chk"><input type="checkbox" id="verbose" checked /> verbose</label>
+          <button class="btn ghost flagbtn" id="flag-filter" title="Show and select only folders with naming problems">⚑ Flagged <span class="flagcount" id="flag-count"></span></button>
           <button class="btn ghost" id="clear-run">Clear selection</button>
         </div>
       </div>
@@ -72,15 +70,22 @@
         <span><i class="sw complete"></i> processed</span>
         <span><i class="sw partial"></i> partial (new/needs run)</span>
         <span><i class="sw empty"></i> no data</span>
+        <span><i class="sw badge skipped">✕</i> files skipped</span>
+        <span><i class="sw badge warning">!</i> naming warning</span>
       </div>
       <div class="logbox">
-        <div class="logbox-head">MESSAGE / LOG</div>
+        <div class="logbox-head">
+          <span>MESSAGE / LOG</span>
+          <label class="chk" title="Show every line the analysis tools print"><input type="checkbox" id="verbose" checked /> show tool output</label>
+        </div>
         <div class="log" id="log-run"></div>
       </div>
     </section>
 
     <div class="middle">
-      <button class="btn run" id="run-btn">RUN<br />CHECKS</button>
+      <button class="btn run" id="run-btn" title="Process the selected folders (already-complete items are skipped)">RUN<br />CHECKS</button>
+      <button class="btn check" id="check-btn" title="Preview only: naming check plus what a run would process or skip. Nothing is downloaded or written.">CHECK</button>
+      <button class="btn ghost reprocess" id="reprocess-btn" title="Redo everything for the selected folders, including items already complete">Reprocess…</button>
       <div class="sel-count" id="sel-count-run">0 selected</div>
     </div>
 
@@ -92,6 +97,10 @@
         </div>
       </div>
       <div class="progress-list" id="progress-list"></div>
+      <div class="flagbox">
+        <div class="filebox-head">Naming check <span id="flag-scope"></span></div>
+        <div class="flaglist" id="flaglist"><div class="muted">Select folders to see naming issues in their input files.</div></div>
+      </div>
       <div class="filebox">
         <div class="filebox-head">WT OneDrive <span id="fb-participant"></span></div>
         <div class="filetree" id="filetree"><div class="muted">Select a single cell to view its staging files.</div></div>

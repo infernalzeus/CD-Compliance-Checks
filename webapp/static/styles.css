@@ -279,3 +279,102 @@ h3.sub { font-size: 12px; color: var(--muted); text-transform: uppercase; letter
 .comp .c-result { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); }
 .comp .c-result.ok { color: var(--green); }
 .comp .c-result.err { color: #ff9b9b; }
+
+/* ---- naming flags ----------------------------------------------------------
+   Severity is never colour alone: every badge and pill carries a glyph (✕ ! i)
+   and the list spells the severity out. Skipped = critical red, warning = amber;
+   info-level drift gets no grid badge, so real data loss isn't drowned out. */
+:root { --flag-skip: #d1495b; --flag-warn: #eda100; --flag-info: #7b8bb0; }
+
+.cell { position: relative; }
+.fbadge {
+  position: absolute; top: -5px; right: -5px; width: 14px; height: 14px;
+  border-radius: 50%; font-size: 9px; font-weight: 800; line-height: 14px;
+  text-align: center; box-shadow: 0 0 0 2px #0c0e12; pointer-events: none;
+}
+.fbadge.skipped { background: var(--flag-skip); color: #fff; }
+.fbadge.warning { background: var(--flag-warn); color: #1a1200; }
+.grid.flag-filter .cell:not(.has-flag) { opacity: .2; }
+.grid { padding-top: 8px; }   /* room for badges on the first row */
+
+.legend .sw.badge { width: 14px; height: 14px; border-radius: 50%; border: 0;
+  font-style: normal; font-size: 9px; font-weight: 800; line-height: 14px; text-align: center; }
+.legend .sw.badge.skipped { background: var(--flag-skip); color: #fff; }
+.legend .sw.badge.warning { background: var(--flag-warn); color: #1a1200; }
+
+.flagbtn { display: inline-flex; align-items: center; gap: 6px; }
+.flagbtn .flagcount:empty { display: none; }
+.flagbtn .flagcount { background: var(--flag-skip); color: #fff; border-radius: 999px;
+  padding: 0 6px; font-size: 11px; line-height: 16px; }
+.flagbtn.has { color: var(--text); border-color: #5a3a3f; }
+.flagbtn.active { background: #2a1d20; border-color: var(--flag-skip); color: #fff; }
+
+.logbox-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.logbox-head .chk { letter-spacing: 0; font-size: 11px; text-transform: none; }
+
+/* middle column: RUN is primary, CHECK is the safe preview, Reprocess is rare */
+.middle .btn.check { width: 92px; font-size: 12px; letter-spacing: .5px; }
+.middle .btn.check:hover { border-color: var(--accent); color: #fff; }
+.middle .btn.reprocess { width: 92px; padding: 5px 4px; font-size: 11px; }
+.middle .btn.reprocess:hover { color: #ffcf9b; border-color: #6b4a22; }
+
+.flagbox { margin-top: 14px; }
+.flaglist { max-height: 42vh; overflow: auto; background: #0c0e12; border: 1px solid var(--line);
+  border-radius: 8px; padding: 8px 10px; font-size: 12px; }
+.flaglist.compact { max-height: 26vh; }
+.flag-counts { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+.fcount { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--panel2); color: var(--text); }
+.fcount.zero { opacity: .45; }
+.fcount.skipped:not(.zero) { background: #3a1f24; color: #ffb3bd; }
+.fcount.warning:not(.zero) { background: #3a2f10; color: #ffd98a; }
+.flag { border-left: 3px solid var(--line); padding: 6px 8px; margin: 6px 0; background: var(--panel); border-radius: 0 6px 6px 0; }
+.flag.skipped { border-left-color: var(--flag-skip); }
+.flag.warning { border-left-color: var(--flag-warn); }
+.flag.info { border-left-color: var(--flag-info); }
+.flag-top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.fsev { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+.fsev.skipped { color: #ff9ba8; }
+.fsev.warning { color: #ffd060; }
+.fsev.info { color: #a9b6d6; }
+.fwhere { color: var(--muted); font-size: 11px; }
+.ffile { font-family: "Cascadia Code", Consolas, monospace; font-size: 11.5px; color: var(--text);
+  margin-top: 3px; word-break: break-all; }
+.fmsg { color: #c9d0dc; margin-top: 3px; }
+.fexp { color: var(--muted); font-size: 11px; margin-top: 3px; }
+.fexp code { font-family: "Cascadia Code", Consolas, monospace; font-size: 10.5px; color: #b8c4da; }
+
+.agg-flags { margin-top: 16px; }
+.agg-note { font-size: 12px; color: #d6dbe5; margin: 4px 0 8px; }
+.agg-note.bad { color: #ffb3bd; }
+
+/* ---- naming: expected vs current (single folder) ---- */
+.conv-season { margin: 8px 0 12px; }
+.conv-shead { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.conv-sname { font-weight: 700; color: var(--text); white-space: pre; }
+.conv-exp { color: var(--muted); font-size: 11px; }
+.conv-exp code { font-family: "Cascadia Code", Consolas, monospace; font-size: 10.5px; color: #b8c4da; }
+.conv-dev { margin: 8px 0 0 10px; padding-left: 8px; border-left: 2px solid var(--line); }
+.conv-dev.skipped { border-left-color: var(--flag-skip); }
+.conv-dev.warning { border-left-color: var(--flag-warn); }
+.conv-dhead { display: flex; flex-direction: column; gap: 2px; margin-bottom: 4px; }
+.conv-dname { font-weight: 600; color: #d6dbe5; font-size: 12px; }
+.conv-file { display: flex; gap: 8px; align-items: flex-start; padding: 4px 0; }
+.conv-fbody { min-width: 0; }
+.conv-fname { font-family: "Cascadia Code", Consolas, monospace; font-size: 11.5px; color: var(--text);
+  word-break: break-all; }
+.conv-lbl { font-family: "Segoe UI", system-ui, sans-serif; font-size: 10px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .4px; margin-right: 4px; }
+.conv-reason { font-size: 11px; margin-top: 2px; color: #c9d0dc; }
+.conv-reason.ok { color: #7ee2a0; }
+.conv-reason.skipped { color: #ffb3bd; }
+.conv-reason.warning { color: #ffd98a; }
+.conv-reason.info { color: #a9b6d6; }
+.conv-note { font-size: 11px; margin: 3px 0; }
+.conv-note.warning { color: #ffd98a; } .conv-note.info { color: #a9b6d6; } .conv-note.skipped { color: #ffb3bd; }
+.cstat { flex: none; width: 16px; height: 16px; border-radius: 50%; font-size: 10px; font-weight: 800;
+  line-height: 16px; text-align: center; }
+.cstat.ok { background: #17331f; color: #7ee2a0; }
+.cstat.info { background: #252d40; color: #a9b6d6; }
+.cstat.warning { background: var(--flag-warn); color: #1a1200; }
+.cstat.skipped { background: var(--flag-skip); color: #fff; }

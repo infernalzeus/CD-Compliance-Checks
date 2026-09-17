@@ -38,7 +38,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
-from cdcompliance import manifest, results, updates  # noqa: E402
+from cdcompliance import manifest, naming, results, updates  # noqa: E402
 from cdcompliance.config import load_config  # noqa: E402
 from cdcompliance.devices import all_devices, implemented_devices  # noqa: E402
 from webapp.jobs import JobManager  # noqa: E402
@@ -385,6 +385,9 @@ def _grid_stream(which: str):
         try:
             if which == "source":
                 cell = manifest.participant_status(_config, name).to_dict()
+                # Naming check rides along with the scan (it only lists folders),
+                # so every cell arrives already knowing its flag counts.
+                cell["flags"] = naming.summarise(naming.check_participant(_config, name))
             else:
                 cell = results.panel2_cell(_config, name)
         except Exception as exc:  # one bad folder must not kill the stream
@@ -402,6 +405,34 @@ def api_panel1_grid_stream() -> StreamingResponse:
 @app.get("/api/panel2/grid-stream")
 def api_panel2_grid_stream() -> StreamingResponse:
     return StreamingResponse(_grid_stream("output"), media_type="application/x-ndjson")
+
+
+@app.get("/api/participant/{pid}/flags")
+def api_participant_flags(pid: str) -> JSONResponse:
+    """Naming-convention flags for one participant's input files."""
+    flags = naming.check_participant(_config, pid)
+    return JSONResponse({"participant": pid, "counts": naming.summarise(flags),
+                         "flags": flags})
+
+
+@app.get("/api/participant/{pid}/naming")
+def api_participant_naming(pid: str) -> JSONResponse:
+    """Expected naming convention beside each current filename, per season/device."""
+    return JSONResponse(naming.describe_participant(_config, pid))
+
+
+@app.post("/api/flags/summary")
+def api_flags_summary(payload: dict) -> JSONResponse:
+    """Flags across several participants (Panel 1 CHECK, Panel 2 aggregate note)."""
+    participants = [p for p in (payload or {}).get("participants", []) if p]
+    per: dict = {}
+    every: list = []
+    for pid in participants:
+        flags = naming.check_participant(_config, pid)
+        per[pid] = naming.summarise(flags)
+        every.extend(flags)
+    return JSONResponse({"counts": naming.summarise(every), "per_participant": per,
+                         "flags": every})
 
 
 @app.get("/api/participant/{pid}/source")

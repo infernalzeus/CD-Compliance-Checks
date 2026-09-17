@@ -122,6 +122,7 @@ class GridController {
       [...this.selected].forEach((p) => { if (!present.has(p)) this.selected.delete(p); });
       this._updateCount();
       hideToast(toastId, total ? `Loaded ${done} / ${total} folders` : "No folders found");
+      if (this.onLoaded) this.onLoaded(this.cells);
     } catch (e) {
       hideToast(toastId);
       this.mount.innerHTML = `<div class="grid-msg">couldn't load folders — check the paths in ⚙</div>`;
@@ -129,11 +130,24 @@ class GridController {
   }
   reload() { if (this._url) this.load(this._url); }
   setUrl(u) { this._url = u; return this; }
+  flagged() { return this.cells.filter((c) => c.flags && (c.flags.skipped || c.flags.warning)); }
 
   _makeCell(c) {
     const cell = el("div", `cell ${c.state}`, c.suffix);
     cell.dataset.participant = c.participant;
     cell.title = `${c.participant} — ${c.state} (${c.done ?? 0}/${c.total ?? 0})`;
+    // Naming flags (Panel 1 only): a corner badge for problems that lose or
+    // misidentify data. Info-level drift is left to the Naming check list.
+    const f = c.flags;
+    if (f && (f.skipped || f.warning)) {
+      const sev = f.skipped ? "skipped" : "warning";
+      cell.classList.add("has-flag");
+      cell.appendChild(el("span", `fbadge ${sev}`, f.skipped ? "✕" : "!"));
+      const parts = [];
+      if (f.skipped) parts.push(`${f.skipped} file(s) skipped`);
+      if (f.warning) parts.push(`${f.warning} naming warning(s)`);
+      cell.title += ` — ${parts.join(", ")}`;
+    }
     if (this.selected.has(c.participant)) cell.classList.add("selected");
     cell.addEventListener("mousedown", (e) => {
       e.preventDefault();
@@ -149,6 +163,7 @@ class GridController {
 
   render() {
     this.mount.innerHTML = "";
+    if (this.onLoaded) setTimeout(() => this.onLoaded(this.cells), 0);
     const present = new Set(this.cells.map((c) => c.participant));
     [...this.selected].forEach((p) => { if (!present.has(p)) this.selected.delete(p); });
     this.cells.forEach((c) => this.mount.appendChild(this._makeCell(c)));
@@ -226,8 +241,161 @@ $("#set-save").addEventListener("click", async () => {
 const runGrid = new GridController("#grid-run", "#sel-count-run", (sel) => {
   if (sel.length === 1) loadSourceTree(sel[0]);
   else $("#filetree").innerHTML = `<div class="muted">Select a single cell to view its staging files.</div>`;
+  loadFlags(sel);
 }).setUrl("/api/panel1/grid-stream");
+runGrid.onLoaded = () => updateFlagCount();
 runGrid.load("/api/panel1/grid-stream");
+
+// ---- naming flags ----------------------------------------------------------
+const SEV_ORDER = { skipped: 0, warning: 1, info: 2 };
+const SEV_LABEL = { skipped: "✕ skipped", warning: "! warning", info: "i info" };
+let flagFilterOn = false;
+
+function updateFlagCount() {
+  const n = runGrid.flagged().length;
+  $("#flag-count").textContent = n ? String(n) : "";
+  $("#flag-filter").classList.toggle("has", n > 0);
+  $("#flag-filter").title = n
+    ? `${n} folder(s) have naming problems that skip or misidentify files. Click to show and select them.`
+    : "No naming problems that skip or misidentify files.";
+}
+
+$("#flag-filter").addEventListener("click", () => {
+  flagFilterOn = !flagFilterOn;
+  $("#grid-run").classList.toggle("flag-filter", flagFilterOn);
+  $("#flag-filter").classList.toggle("active", flagFilterOn);
+  if (flagFilterOn) {
+    // Select exactly the flagged folders, so CHECK / RUN act on them directly.
+    runGrid.selected = new Set(runGrid.flagged().map((c) => c.participant));
+    runGrid.render();
+    runGrid._changed();
+    logLine(`Showing ${runGrid.selected.size} flagged folder(s).`, "warning");
+  }
+});
+
+let flagReq = 0;
+async function loadFlags(participants) {
+  const box = $("#flaglist");
+  if (!participants.length) {
+    $("#flag-scope").textContent = "";
+    box.innerHTML = `<div class="muted">Select folders to see naming issues in their input files.</div>`;
+    return null;
+  }
+  const mine = ++flagReq;
+  $("#flag-scope").textContent = participants.length === 1
+    ? `· ${participants[0]} · expected vs current`
+    : `· ${participants.length} folders · issues`;
+  box.innerHTML = `<div class="muted">checking names…</div>`;
+  const data = await api("/api/flags/summary", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ participants }),
+  }).catch(() => null);
+  if (mine !== flagReq) return data;            // a newer selection superseded this
+  if (participants.length === 1) {
+    // One folder: show the convention beside every file, not just the problems.
+    const view = await api(`/api/participant/${encodeURIComponent(participants[0])}/naming`).catch(() => null);
+    if (mine !== flagReq) return data;
+    renderConventions(box, view);
+  } else {
+    renderFlagList(box, data, { showInfo: false });
+  }
+  return data;
+}
+
+// Flag text comes from filenames and the rules file; patterns like "<Survey>"
+// must render literally, not be parsed as HTML.
+function esc(t) {
+  return String(t ?? "").replace(/[&<>"']/g, (ch) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+}
+
+const STATUS_ICON = { ok: "✓", info: "i", warning: "!", skipped: "✕" };
+const STATUS_TEXT = {
+  ok: "matches convention", info: "name has drifted", warning: "check name", skipped: "not processed",
+};
+
+// Expected-vs-current for one participant: season -> device -> each file the
+// pipeline uses, with the convention (from the naming sheet) shown above it.
+function renderConventions(box, view) {
+  box.innerHTML = "";
+  if (!view || !view.exists) { box.appendChild(el("div", "muted", "Participant folder not found.")); return; }
+  const c = view.counts || {};
+  const head = el("div", "flag-counts");
+  ["skipped", "warning", "info"].forEach((k) =>
+    head.appendChild(el("span", `fcount ${k} ${c[k] ? "" : "zero"}`, `${SEV_LABEL[k]} <b>${c[k] || 0}</b>`)));
+  box.appendChild(head);
+  if (!view.seasons.length) {
+    box.appendChild(el("div", "muted", "No files here that the pipeline processes."));
+    return;
+  }
+  view.seasons.forEach((sn) => {
+    const sb = el("div", "conv-season");
+    sb.appendChild(el("div", "conv-shead",
+      `<span class="cstat ${sn.status}">${STATUS_ICON[sn.status]}</span>` +
+      `<span class="conv-sname">${esc(sn.name)}</span>` +
+      `<span class="conv-exp">folder expected <code>${esc(sn.expected)}</code></span>`));
+    sn.notes.forEach((n) => sb.appendChild(el("div", `conv-note ${n.severity}`, esc(n.message))));
+
+    sn.devices.forEach((dv) => {
+      const db = el("div", `conv-dev ${dv.status}`);
+      db.appendChild(el("div", "conv-dhead",
+        `<span class="conv-dname">${esc(dv.folder)}</span>` +
+        `<span class="conv-exp">expected <code>${esc(dv.expected)}</code>` +
+        (dv.example ? `<br>e.g. <code>${esc(dv.example)}</code>` : "") + `</span>`));
+      dv.notes.forEach((n) => db.appendChild(el("div", `conv-note ${n.severity}`, esc(n.message))));
+      dv.files.forEach((f) => {
+        const row = el("div", `conv-file ${f.status}`);
+        row.appendChild(el("span", `cstat ${f.status}`, STATUS_ICON[f.status]));
+        const body = el("div", "conv-fbody");
+        body.appendChild(el("div", "conv-fname", `<span class="conv-lbl">current</span> ${esc(f.name)}`));
+        if (f.reasons.length) {
+          f.reasons.forEach((r) => body.appendChild(el("div", `conv-reason ${r.severity}`, esc(r.message))));
+        } else {
+          body.appendChild(el("div", "conv-reason ok", STATUS_TEXT.ok));
+        }
+        row.appendChild(body);
+        db.appendChild(row);
+      });
+      sb.appendChild(db);
+    });
+    box.appendChild(sb);
+  });
+}
+
+function renderFlagList(box, data, { showInfo = false, limit = 200 } = {}) {
+  box.innerHTML = "";
+  if (!data) { box.appendChild(el("div", "muted", "Could not run the naming check.")); return; }
+  const c = data.counts || {};
+  const head = el("div", "flag-counts");
+  ["skipped", "warning", "info"].forEach((k) =>
+    head.appendChild(el("span", `fcount ${k} ${c[k] ? "" : "zero"}`, `${SEV_LABEL[k]} <b>${c[k] || 0}</b>`)));
+  box.appendChild(head);
+
+  const flags = (data.flags || [])
+    .filter((f) => showInfo || f.severity !== "info")
+    .sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity]
+      || a.participant.localeCompare(b.participant) || a.season.localeCompare(b.season));
+  if (!flags.length) {
+    box.appendChild(el("div", "muted", (c.info && !showInfo)
+      ? `No problems that skip or misidentify files. ${c.info} cosmetic naming note(s) — select one folder to see them.`
+      : "All processed input files follow the naming convention."));
+    return;
+  }
+  flags.slice(0, limit).forEach((f) => {
+    const row = el("div", `flag ${f.severity}`);
+    const where = [f.participant, f.season, f.device].filter(Boolean).join(" / ");
+    row.appendChild(el("div", "flag-top",
+      `<span class="fsev ${f.severity}">${SEV_LABEL[f.severity]}</span><span class="fwhere">${esc(where)}</span>`));
+    if (f.file) row.appendChild(el("div", "ffile", esc(f.file)));
+    row.appendChild(el("div", "fmsg", esc(f.message)));
+    if (f.expected) {
+      row.appendChild(el("div", "fexp",
+        `expected <code>${esc(f.expected)}</code>${f.example ? ` · e.g. <code>${esc(f.example)}</code>` : ""}`));
+    }
+    box.appendChild(row);
+  });
+  if (flags.length > limit) box.appendChild(el("div", "muted", `…and ${flags.length - limit} more.`));
+}
 
 $("#clear-run").addEventListener("click", () => runGrid.clear());
 
@@ -259,7 +427,19 @@ async function loadSourceTree(participant) {
 
 // ---- run + live progress
 const runBtn = $("#run-btn");
-runBtn.addEventListener("click", startRun);
+// Three explicit actions instead of checkboxes that silently change what RUN does.
+runBtn.addEventListener("click", () => startRun({ dryRun: false, force: false }));
+$("#check-btn").addEventListener("click", () => startRun({ dryRun: true, force: false }));
+$("#reprocess-btn").addEventListener("click", () => {
+  const participants = runGrid.list();
+  if (!participants.length) { logLine("Select at least one folder.", "warning"); return; }
+  const shown = participants.slice(0, 12).join(", ") + (participants.length > 12 ? ` …(+${participants.length - 12})` : "");
+  const ok = window.confirm(
+    `Reprocess ${participants.length} folder(s)?\n\n${shown}\n\n` +
+    "Everything is redone, including items already complete. Actigraph recordings " +
+    "are re-downloaded from OneDrive (~1 GB each) and re-epoched, which can take a long time.");
+  if (ok) startRun({ dryRun: false, force: true });
+});
 
 $("#stop-btn").addEventListener("click", async () => {
   if (!currentJobId) return;
@@ -347,11 +527,10 @@ function markSkip(label, reason) {
 function setBadge(label, html) { ensureCard(label).badge.innerHTML = html; }
 function showStop(on) { $("#stop-btn").style.display = on ? "" : "none"; }
 
-async function startRun() {
+async function startRun({ dryRun = false, force = false } = {}) {
   const participants = runGrid.list();
   if (!participants.length) { logLine("Select at least one folder.", "warning"); return; }
-  const force = $("#force-run").checked;
-  const dry_run = $("#dry-run").checked;
+  const dry_run = dryRun;
 
   // Never disable the button. If a real run is busy, refuse new *real* runs but
   // still allow dry runs (which bypass the pipeline queue on the backend).
@@ -360,10 +539,35 @@ async function startRun() {
     return;
   }
 
+  // Pre-flight naming check: surfaced for CHECK, and a gate before a real run
+  // when some input files would be skipped.
+  const flags = await loadFlags(participants);
+  const fc = (flags && flags.counts) || {};
+  if (!dry_run && fc.skipped) {
+    const skipped = (flags.flags || []).filter((f) => f.severity === "skipped");
+    const list = skipped.slice(0, 8).map((f) => `• ${f.participant} / ${f.season}: ${f.file}`).join("\n");
+    const go = window.confirm(
+      `${fc.skipped} input file(s) in this selection can't be processed because of how ` +
+      `they are named or placed:\n\n${list}${skipped.length > 8 ? "\n…" : ""}\n\n` +
+      "Their results will be missing. Run anyway? (See Naming check on the right.)");
+    if (!go) { logLine("Run cancelled — review the Naming check first.", "warning"); return; }
+  }
+
   $("#log-run").innerHTML = "";
   $("#progress-list").innerHTML = "";
   progressCards = {}; currentLabel = null; killTimer();
-  logLine(`${dry_run ? "DRY RUN — preview only" : "RUN"}: ${participants.join(", ")}`, dry_run ? "warning" : "ok");
+  const mode = dry_run ? "CHECK — preview only, nothing is downloaded or written"
+    : force ? "REPROCESS" : "RUN";
+  logLine(`${mode}: ${participants.join(", ")}`, dry_run ? "warning" : "ok");
+  if (flags) {
+    const bits = [];
+    if (fc.skipped) bits.push(`${fc.skipped} skipped`);
+    if (fc.warning) bits.push(`${fc.warning} warning(s)`);
+    if (fc.info) bits.push(`${fc.info} note(s)`);
+    logLine(bits.length ? `Naming check: ${bits.join(", ")} — details on the right.`
+                        : "Naming check: all input files follow the convention.",
+            fc.skipped ? "error" : fc.warning ? "warning" : "ok");
+  }
 
   const resp = await api("/api/run", {
     method: "POST",
@@ -494,6 +698,30 @@ async function runAggregate() {
     body: JSON.stringify({ participants }),
   });
   renderAggregate(a);
+  renderAggregateFlags(participants);
+}
+
+// Panel 2: explain gaps in the aggregate. A season missing from the numbers above
+// is often a file that was skipped, or processed under a fallback, because of its
+// name - so say so right where the numbers are read.
+async function renderAggregateFlags(participants) {
+  const host = el("div", "agg-flags");
+  host.appendChild(el("h3", "sub", "Input naming"));
+  const body = el("div", "flaglist compact", `<div class="muted">checking input file names…</div>`);
+  host.appendChild(body);
+  $("#agg").appendChild(host);
+  const data = await api("/api/flags/summary", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ participants }),
+  }).catch(() => null);
+  const c = (data && data.counts) || {};
+  const lead = c.skipped
+    ? `<b>${c.skipped} input file(s) could not be processed</b>, so their results are missing from the numbers above.`
+    : c.warning
+      ? `All input files were processed, but ${c.warning} were only found through a naming fallback or have an ID that doesn't match their folder.`
+      : "";
+  if (lead) host.insertBefore(el("div", c.skipped ? "agg-note bad" : "agg-note", lead), body);
+  renderFlagList(body, data, { showInfo: false, limit: 12 });
 }
 
 function renderAggregate(a) {

@@ -299,6 +299,14 @@ EXPIWELL_SUFFIXES = {
 }
 
 
+def _cli_supports(repo: Path, flag: str) -> bool:
+    """True when the tool's cli.py declares *flag* (cheap version sniff)."""
+    try:
+        return flag in (Path(repo) / "cli.py").read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+
+
 def run_expiwell(
     config: Config, folder: Path, output_dir: Path, stem: str, season: str, bus: EventBus
 ) -> dict[str, Path]:
@@ -329,6 +337,12 @@ def run_expiwell(
     ]
     if xpw.schedule_file:
         cmd += ["--schedule", str(xpw.schedule_file)]
+    # Participant comes from the folder, because exports that were never renamed
+    # carry no CD ID. Only pass it to a tool version that understands the flag:
+    # users update tool repos independently, and an older expiwell-metrics would
+    # otherwise reject the whole command.
+    if _cli_supports(config.tools.expiwell_repo, "--participant"):
+        cmd += ["--participant", stem]
 
     _stream(cmd, config.tools.expiwell_repo, bus, name="expiwell:process")
 

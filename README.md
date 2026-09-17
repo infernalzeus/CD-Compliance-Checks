@@ -295,6 +295,8 @@ with the digits after `CD` (so `011` is `CD011`). The colours mean:
 | **Grey** | Not processed yet |
 | **White** | Fully processed |
 | **Grey with an orange border** | Partly done — some seasons processed, or new data has appeared since |
+| **Red ✕ badge** in the corner | An input file is present but **can't be processed** because of how it is named or placed |
+| **Amber ! badge** in the corner | Processed, but the name doesn't reliably identify the file, or it was only found through a naming fallback |
 
 To run checks:
 
@@ -302,19 +304,57 @@ To run checks:
    *Clear selection* starts over. With exactly one selected, the panel at the
    bottom lists that participant's files with a ☁ (still in the cloud) or ●
    (downloaded) marker.
-2. **Tick "dry run"** first if you want a safe preview. A dry run only *looks*:
-   it lists what would be processed and how big each download is. It changes
-   nothing and downloads nothing. This is the recommended way to start.
+2. **Press CHECK** first for a safe preview. It runs the naming check and lists
+   what would be processed, what would be skipped, and how big each download is.
+   It changes nothing and downloads nothing. This is the recommended way to start.
 3. **Press RUN CHECKS.** Progress appears live on the right: the download bar,
-   each step as it runs, the analysis tools' own messages line by line, and the
-   final verdicts. Cells turn white as they finish.
+   each step as it runs, and the final verdicts. Cells turn white as they finish.
+   Anything already finished is skipped, which is what makes a re-run fast. If
+   the selection contains files that can't be processed, RUN lists them and asks
+   before starting.
 
-Two useful tick boxes:
+The other controls:
 
-- **force reprocess** — redo everything even if results already exist. Normally
-  leave this off: anything already finished is skipped, which is what makes a
-  re-run fast.
-- **verbose** — show every line of output from the analysis tools in the log.
+- **Reprocess…** (under RUN) — redo everything for the selected folders, even
+  results that already exist. It asks for confirmation first, because Actigraph
+  recordings are re-downloaded (~1 GB each) and re-epoched.
+- **show tool output** (in the log header) — print every line the analysis tools
+  output. It only changes what the log shows, not what the run does.
+- **⚑ Flagged** (above the grid) — shows and selects only the folders with naming
+  problems, with a count of how many there are.
+
+### Naming check
+
+Files are found by their folder and filename, so a file that drifts from the
+naming convention can be silently skipped or processed under the wrong identity.
+The **Naming check** box on the right changes with the selection:
+
+- **One folder selected — expected vs current.** Every season and device folder
+  is listed with its naming convention and an example (from the study's naming
+  sheet), and under it each file the pipeline uses, shown by its current name
+  with ✓ when it matches or the reason it doesn't.
+- **Several folders selected — issues only.** A list of the problems across the
+  selection, each with the file, what's wrong, and the expected pattern. Only files the pipeline actually processes are checked; the other
+uploads (assessment logs, consent PDFs, screenshots) are ignored.
+
+| Level | Meaning | Examples |
+|---|---|---|
+| **✕ skipped** | Data is present but won't be processed | a MiEYE file not named `-logged.csv`/`-download.csv`; a raw Actigraph export with no `.bin`; a second light file in the same season |
+| **! warning** | Processed, but identity is unreliable or relied on a fallback | Expiwell export never renamed (`Affect.csv`); MiEYE still `-download.csv`; filename ID doesn't match its folder |
+| **i info** | Processed fine; the name has drifted | missing season tag `S1`–`S4`; extra spaces; underscores instead of hyphens |
+
+Where a file doesn't follow the convention but its folder still identifies it
+unambiguously, it **is processed** and flagged so it can be renamed: un-renamed
+Expiwell exports, MiEYE files still named `-download.csv`, and Expiwell names
+missing `Data`. When several light files share a season, the one carrying the
+participant's own ID is used — a stray test file can never be processed as that
+participant.
+
+The **Visualise** tab repeats this under *Combined compliance* as **Input
+naming**, so a season missing from the numbers is explained there.
+
+The patterns, messages and severities live in `cdcompliance/naming_rules.yaml`;
+edit that file when a convention changes.
 
 A full run on a fresh 1 GB recording takes a while — most of it is the OneDrive
 download and the epoching step. You can press **STOP** at any point; it will
@@ -371,7 +411,7 @@ run picks up where you left off.
 | The grid is empty | The source folder is wrong, or OneDrive hasn't synced | Check the path in the **⚙** panel — it reports whether each folder exists |
 | A download bar sits at 0% for ages | OneDrive isn't fetching the file | Check the OneDrive icon in the system tray: signed in, not paused, not out of disk space. Try opening the file in File Explorer to force a download |
 | `Timed out after 3600s downloading...` | The download took over an hour | Usually a OneDrive problem. Retry; if the connection is slow, raise `total_timeout_seconds` in `config.yaml` |
-| `Step 1 finished but expected output not found` | The epoching tool failed | Tick **verbose** and re-run — the tool's own error will be in the log. Try `python setup_tools.py --update` |
+| `Step 1 finished but expected output not found` | The epoching tool failed | Tick **show tool output** and re-run — the tool's own error will be in the log. Try `python setup_tools.py --update` |
 | A run says `cancelled` | You pressed STOP or shut the server down | Nothing is broken. Re-run to continue where it left off |
 | Everything is slow | Normal for a first run — the ~1 GB download and the epoching step dominate | Later runs skip finished work and are far quicker |
 
@@ -395,7 +435,7 @@ recording produced). Send the newest one to whoever maintains this project.
 | **PASS / REVIEW / FAIL** | Enough valid days / just short (worth a human look) / not enough |
 | **SVM** | A single number for how much movement happened in an epoch |
 | **Melanopic lux** | Light measured the way the body clock responds to it, rather than how bright it looks |
-| **Dry run** | A preview that changes nothing |
+| **CHECK** (dry run) | A preview that changes nothing: naming check plus what a run would do |
 | **Port 8000** | The "channel number" the dashboard uses on your own PC |
 
 ---

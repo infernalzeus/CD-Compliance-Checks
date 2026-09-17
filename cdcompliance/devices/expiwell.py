@@ -51,12 +51,26 @@ class ExpiwellProcessor(DeviceProcessor):
         """Outputs are named after the participant (the folder holds many CSVs)."""
         return item.participant
 
+    @staticmethod
+    def _survey_files(config: Config, device_dir: Path) -> list[Path]:
+        """Survey CSVs to process from an Expiwell folder.
+
+        Convention is ``CDxxx-Expiwell-Data-<Survey>.csv``. Exports that were
+        never renamed (``Affect.csv``) still sit in the right participant/season
+        folder, so the folder identifies them; fall back to every CSV there and
+        let expiwell-metrics validate each file's ExpiWell preamble.
+        """
+        files = sorted(device_dir.glob(config.expiwell_input_glob))
+        if not files:
+            files = sorted(p for p in device_dir.glob("*.csv") if p.is_file())
+        return files
+
     def discover(self, config, participant, season, season_dir):
         device_dir = Path(season_dir) / config.expiwell_folder_name
         output_dir = self._output_dir(config, participant, season)
         if not device_dir.is_dir():
             return []
-        surveys = sorted(device_dir.glob(config.expiwell_input_glob))
+        surveys = self._survey_files(config, device_dir)
         # The folder itself is the input; None marks "seen but nothing to do".
         return [
             WorkItem(
@@ -123,7 +137,7 @@ class ExpiwellProcessor(DeviceProcessor):
                 }
             else:
                 # The survey CSVs are small but may still be OneDrive placeholders.
-                for csv_path in sorted(folder.glob(config.expiwell_input_glob)):
+                for csv_path in self._survey_files(config, folder):
                     onedrive.ensure_local(
                         csv_path, bus,
                         poll_interval=config.onedrive.poll_interval_seconds,

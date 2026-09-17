@@ -1,0 +1,89 @@
+# Input naming conventions for the files the pipeline processes.
+#
+# Source: the study's file-naming sheet (tests.xlsx), trimmed to the files the
+# compliance checks actually read. Files that are uploaded but never processed
+# (assessment logs, consent PDFs, config screenshots, raw .csv exports...) are
+# deliberately NOT checked.
+#
+# Editing this file changes what is flagged, the message shown and the expected
+# example - no code change needed. Severity decides how a flag is shown:
+#
+#   skipped  data is present but the pipeline cannot use it     (red badge)
+#   warning  processed, but the name does not reliably identify  (amber badge)
+#            the file, or it was only picked up by a fallback
+#   info     processed fine; the name has drifted from convention (list only)
+
+season_folder:
+  pattern: '^(Autumn|Winter|Spring|Summer) \d{4}$'
+  expected: '<Season> <Year>'
+  example: 'Autumn 2025'
+
+devices:
+  actigraph:
+    folder: Actigraph
+    expected: 'CDXXX_wear position_SN_yyyy-mm-dd hh-mm-ss.bin'
+    example: 'CD079_left wrist_109267_2026-07-28 13-04-21.bin'
+    pattern: '^CD\d+_[A-Za-z ]+_\d+_\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}\.bin$'
+
+  mieye:
+    folder: MiEYE
+    expected: 'Device CDXXX Sn-yyyy-mm-dd hh-mm-ss-logged.csv'
+    example: 'M92 CD079 S2-2026-03-18 16-39-05-logged.csv'
+    pattern: '^M\d+ CD\d+ S\d-\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}-logged\.csv$'
+
+  expiwell:
+    folder: Expiwell
+    expected: 'CDXXX-Expiwell-Data-<Survey>.csv'
+    example: 'CD079-Expiwell-Data-Affect.csv'
+    pattern: '^CD\d+-Expiwell-Data-[A-Za-z0-9-]+\.csv$'
+
+rules:
+  season-unrecognised:
+    severity: warning
+    message: "Season folder isn't '<Season> <Year>', so results are grouped as season 'Other'."
+  season-spacing:
+    severity: info
+    message: 'Season folder has extra spaces.'
+
+  id-mismatch:
+    severity: warning
+    message: "The ID in the filename ({found}) doesn't match the participant folder ({folder}); the file may be in the wrong folder."
+  id-missing:
+    severity: warning
+    message: 'No participant ID in the filename; it is identified only by its folder.'
+
+  actigraph-off-pattern:
+    severity: warning
+    message: "Recording name doesn't follow the convention (wear position, serial number or timestamp missing or run together)."
+  actigraph-multiple:
+    severity: info
+    message: '{count} recordings in one season folder; all are processed.'
+  actigraph-no-bin:
+    severity: skipped
+    message: 'A raw GENEActiv export is here but no .bin, and only the .bin is processed.'
+
+  mieye-download-name:
+    severity: warning
+    message: "Still named '-download.csv'. Processed anyway, but should be renamed to '-logged.csv'."
+  mieye-extra-files:
+    severity: skipped
+    message: 'More than one light file in this season; only {used} is processed.'
+  mieye-unreadable:
+    severity: skipped
+    message: "Light file isn't named '-logged.csv' or '-download.csv', so it isn't processed."
+  mieye-off-pattern:
+    severity: info
+    message: "Name parts are present but in a different order or format from the convention."
+  mieye-no-season-tag:
+    severity: info
+    message: 'No season tag (S1-S4) in the filename.'
+  mieye-no-device:
+    severity: info
+    message: 'No device name (e.g. M92) in the filename.'
+
+  expiwell-not-renamed:
+    severity: warning
+    message: "Export was never renamed with the participant prefix. Processed from its folder, but should be renamed."
+  expiwell-off-pattern:
+    severity: info
+    message: "Name has extra spaces, underscores or a missing 'Data' part; it is still recognised."

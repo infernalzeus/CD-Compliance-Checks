@@ -24,3 +24,6 @@ Thumbs.db
 .vscode/
 .idea/
 launcher-log.txt
+
+# Claude Code local session config (per-machine, not part of the program)
+.claude/
