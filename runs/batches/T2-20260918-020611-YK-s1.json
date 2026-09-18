@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "batch_id": "T2-20260918-020611-YK-s1",
+  "stage": "T2",
+  "stage_label": "master -> T2",
+  "seasons": [
+    1
+  ],
+  "mode": "export",
+  "mode_label": "export",
+  "initials": "YK",
+  "source": "dashboard",
+  "started_at": "2026-09-18T02:06:11",
+  "finished_at": "2026-09-18T02:06:11",
+  "seconds": 0.0,
+  "status": "exported",
+  "n_participants": 2,
+  "thresholds": {
+    "actigraph": {
+      "nonwear_axis_sd_g": 0.013,
+      "nonwear_min_minutes": 30,
+      "min_valid_hours": 10.0,
+      "min_valid_days": 3,
+      "review_margin_days": 1,
+      "min_diurnal_range_svm": 20.0,
+      "epochs_per_hour": 60,
+      "expected_wear_hours": 16.0,
+      "svm_column": "SVM_sum",
+      "time_column": "Time",
+      "axis_sd_columns": [
+        "Ax_sd",
+        "Ay_sd",
+        "Az_sd"
+      ],
+      "activity_threshold_svm": 5.0
+    },
+    "mieye": {
+      "min_valid_days": 3,
+      "review_margin_days": 1,
+      "light_floor_lx": 10.0,
+      "min_light_hours": 10.0,
+      "expected_light_hours": 10.0,
+      "dark_threshold_lx": 200.0,
+      "min_day_night_ratio": 2.0,
+      "channel": "melanopic",
+      "day_window": [
+        7,
+        19
+      ],
+      "night_window": [
+        23,
+        6
+      ],
+      "tat_threshold_lx": 250.0,
+      "tbt_threshold_lx": 10.0
+    },
+    "expiwell": {
+      "min_response_rate_pct": 70.0,
+      "review_margin_pct": 10.0,
+      "expected_days": 15,
+      "min_plausible_duration_sec": 5.0,
+      "custom_schedule": false
+    }
+  },
+  "tool_versions": {
+    "cd-compliance-checks": "c2edfe4",
+    "actigraphy-epoching": "2204833",
+    "actigraphy-sleep-metrics": "f7b2562",
+    "luminosity-metrics": "5178ea7",
+    "expiwell-metrics": "d3f731d"
+  },
+  "private_detail": "kept locally, not published",
+  "export_of": "T2-20260918-001143-YK-s1",
+  "export_id": "T2-20260918-001143-YK-s1_20260918-020611",
+  "n_participant_seasons": 2,
+  "n_days": 30,
+  "n_measures": 49,
+  "devices": [
+    "actigraph",
+    "mieye",
+    "expiwell"
+  ],
+  "day_range": [
+    1,
+    15
+  ],
+  "part_days": "dropped",
+  "cut_offs": [],
+  "files": [
+    "data_long",
+    "data_wide_day",
+    "dictionary",
+    "manifest",
+    "README",
+    "season_summary"
+  ],
+  "n_files": 6
+}

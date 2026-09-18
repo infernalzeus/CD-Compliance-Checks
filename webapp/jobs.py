@@ -20,7 +20,7 @@ from pathlib import Path
 from queue import Queue
 from typing import Any, Optional
 
-from cdcompliance import pipeline, tools
+from cdcompliance import batches, naming, pipeline, tools
 from cdcompliance.config import Config, ResolvedSelection
 from cdcompliance.devices import implemented_devices
 from cdcompliance.events import EventBus
@@ -28,12 +28,16 @@ from cdcompliance.events import EventBus
 
 class Job:
     def __init__(
-        self, job_id: str, participants: list[str], force: bool, dry_run: bool = False
+        self, job_id: str, participants: list[str], force: bool, dry_run: bool = False,
+        initials: str = "",
     ) -> None:
         self.id = job_id
         self.participants = participants
         self.force = force
         self.dry_run = dry_run
+        self.initials = initials
+        self.batch_id: Optional[str] = None
+        self.recorder = None      # BatchRecorder for real runs
         self.status = "queued"  # queued | running | done | error | cancelled
         self.history: list[dict[str, Any]] = []
         self.subscribers: list[asyncio.Queue] = []
@@ -52,6 +56,7 @@ class Job:
             "force": self.force,
             "dry_run": self.dry_run,
             "status": self.status,
+            "batch_id": self.batch_id,
             "created_at": self.created_at,
             "events": len(self.history),
         }
@@ -70,8 +75,9 @@ class JobManager:
         self._loop = loop
 
     # -- public API ----------------------------------------------------------
-    def submit(self, participants: list[str], force: bool, dry_run: bool = False) -> Job:
-        job = Job(uuid.uuid4().hex[:12], participants, force, dry_run)
+    def submit(self, participants: list[str], force: bool, dry_run: bool = False,
+               initials: str = "") -> Job:
+        job = Job(uuid.uuid4().hex[:12], participants, force, dry_run, initials)
         self.jobs[job.id] = job
         if dry_run:
             # Dry runs are read-only and fast — run immediately in their own
@@ -148,6 +154,12 @@ class JobManager:
         except Exception as exc:  # never let a job crash the worker/thread
             self._emit(job, {"type": "log", "level": "error", "message": str(exc)})
             job.status = "error"
+            if job.recorder is not None:          # still record the failed batch
+                try:
+                    job.recorder.finish("error")
+                except Exception:
+                    pass
+                job.recorder = None
             self._emit(
                 job,
                 {"type": "job_end", "status": "error", "error": str(exc), "dry_run": job.dry_run},
@@ -168,7 +180,20 @@ class JobManager:
             },
         )
 
-        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        # A real run is one batch (stage 1: staging -> master), recorded as a
+        # public stripped record + private detail. Previews write nothing.
+        recorder = None
+        if not job.dry_run:
+            recorder = batches.BatchRecorder(
+                self.config, stage="PRE", mode="force" if job.force else "new",
+                initials=job.initials, participants=job.participants,
+            )
+            job.batch_id = recorder.id
+            job.recorder = recorder
+            bus.subscribe(recorder)
+            self._emit(job, {"type": "batch_start", "batch_id": recorder.id,
+                             "initials": recorder.initials})
+
         for pid in job.participants:
             if job.cancel_event.is_set():
                 break
@@ -187,13 +212,20 @@ class JobManager:
                 # Preview only: discovery + OneDrive state, no download/processing.
                 pipeline.plan(self.config, selection, bus)
             else:
-                run_dir = self.config.runs_dir / f"{pid}_{stamp}_{job.id}"
-                pipeline.run(
-                    self.config, selection, bus, run_dir=run_dir,
-                    cancel_event=job.cancel_event,
-                )
+                result = pipeline.run(self.config, selection, bus,
+                                      cancel_event=job.cancel_event)
+                try:
+                    flags = naming.summarise(naming.check_participant(self.config, pid))
+                except Exception:
+                    flags = None
+                recorder.add_result(result, flags)
 
         job.status = "cancelled" if job.cancel_event.is_set() else "done"
+        if recorder is not None:
+            job.recorder = None
+            record = recorder.finish(job.status)
+            self._emit(job, {"type": "batch_end", "batch_id": recorder.id,
+                             "items": record["items"]})
         self._emit(
             job,
             {"type": "job_end", "status": job.status, "dry_run": job.dry_run},

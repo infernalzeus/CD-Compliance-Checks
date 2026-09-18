@@ -11,6 +11,7 @@ pyyaml>=6.0        # config loading
 pandas>=1.5        # epoch CSV reading, compliance, Excel assembly
 numpy>=1.23        # compliance statistics
 openpyxl>=3.1      # .xlsx workbook writing
+matplotlib>=3.7    # charts PDF in a T2 export (the export still works without it)
 
 # Web dashboard (webapp/).
 fastapi>=0.110     # dashboard API

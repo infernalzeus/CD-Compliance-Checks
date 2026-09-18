@@ -97,6 +97,12 @@ def _python_cmd(config: Config) -> list[str]:
 
 def _stream(cmd: list[str], cwd: Path, bus: EventBus, name: str) -> None:
     """Run a subprocess, streaming merged stdout/stderr to the event bus."""
+    if not Path(cwd).is_dir():
+        # Otherwise Windows reports only "The directory name is invalid".
+        raise ToolError(
+            f"{name}: tool folder not found at {cwd}. Install or point to it from "
+            "the start page (tool repositories)."
+        )
     bus.emit("step_start", name=name, cmd=cmd, cwd=str(cwd))
     t0 = time.perf_counter()
 

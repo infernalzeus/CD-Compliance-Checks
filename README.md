@@ -285,7 +285,7 @@ Then open your browser at:
 http://127.0.0.1:8000
 ```
 
-### Tab 1 — Run Checks
+### Compliance tab
 
 The grid shows every participant folder found in the source location, labelled
 with the digits after `CD` (so `011` is `CD011`). The colours mean:
@@ -304,24 +304,55 @@ To run checks:
    *Clear selection* starts over. With exactly one selected, the panel at the
    bottom lists that participant's files with a ☁ (still in the cloud) or ●
    (downloaded) marker.
-2. **Press CHECK** first for a safe preview. It runs the naming check and lists
-   what would be processed, what would be skipped, and how big each download is.
-   It changes nothing and downloads nothing. This is the recommended way to start.
-3. **Press RUN CHECKS.** Progress appears live on the right: the download bar,
-   each step as it runs, and the final verdicts. Cells turn white as they finish.
-   Anything already finished is skipped, which is what makes a re-run fast. If
-   the selection contains files that can't be processed, RUN lists them and asks
-   before starting.
+2. **Pick a run mode** (the buttons above the grid). The big button in the middle
+   changes to match, and the text under it says exactly what will happen to the
+   folders you've selected before you press anything:
 
-The other controls:
+   | Run mode | What it does | Use it when |
+   |---|---|---|
+   | **New & unfinished** *(default)* | Processes new samples and anything half-done; skips anything already complete | Normal use — including when a new season or file has been uploaded |
+   | **Preview (dry run)** | Runs the naming check and lists what would be processed or skipped. Downloads and writes nothing | Before a real run, to check the plan |
+   | **Force reprocess** | Redoes everything for the selected folders, including complete items. Asks for confirmation first, because Actigraph recordings are re-downloaded (~1 GB each) | After a threshold or tool change, when existing results must be regenerated |
 
-- **Reprocess…** (under RUN) — redo everything for the selected folders, even
-  results that already exist. It asks for confirmation first, because Actigraph
-  recordings are re-downloaded (~1 GB each) and re-epoched.
-- **show tool output** (in the log header) — print every line the analysis tools
-  output. It only changes what the log shows, not what the run does.
+3. **Press the button.** Progress appears live on the right, tagged with the
+   mode (e.g. `RUN · new & unfinished`, `PREVIEW · dry run · done`). Cells turn
+   white as they finish. If the selection contains files that can't be
+   processed, a real run lists them and asks before starting.
+
+**How a newly uploaded sample gets processed:** each folder is broken down into
+season × device items, and an item counts as complete only when all its expected
+results exist. A new season or file has no results yet, so **New & unfinished**
+picks it up while skipping everything already done. An item that stopped part-way
+resumes from its last finished step (for Actigraph, an existing 60-second file
+means the 1 GB download and epoching are not repeated).
+
+Other controls:
+
+- **debug output** (beside the run mode) — print every line the analysis tools
+  output in the log. It only changes what the log shows, not what the run does.
 - **⚑ Flagged** (above the grid) — shows and selects only the folders with naming
   problems, with a count of how many there are.
+
+### Batches and initials
+
+Every run that writes data (**New & unfinished** or **Force reprocess**) is one
+**batch** and needs your **initials** (2–4 letters, typed beside the run mode and
+remembered for your account). Previews don't need initials and aren't recorded.
+
+Batches are listed under **Batches · staging → master** below the log. The ✕ on
+a batch **archives** it: it disappears from the list (tick *show archived* to
+see it again) but its records are kept, with who archived it and when.
+
+Each batch is saved in two parts (see `runs/README.md`):
+
+- `runs/batches/` — a **public**, stripped record that is committed to the
+  repository: initials, time, mode, counts, thresholds and tool versions. It
+  never contains participant IDs, paths, filenames, serial numbers, dates of
+  recordings or results; the code checks this before writing it.
+- `runs/_private/` — the full detail (participants, per-item results, every
+  event), which stays on your machine and is never committed.
+
+The command line follows the same rule: `python run.py --participant CD012 --initials YK`.
 
 ### Naming check
 
@@ -361,7 +392,7 @@ download and the epoching step. You can press **STOP** at any point; it will
 cancel the download or analysis in progress within a second or two and clean up
 any half-written file.
 
-### Tab 2 — Visualise
+### Visualise tab
 
 A grid of the folders that have already been processed.
 
@@ -370,6 +401,121 @@ A grid of the folders that have already been processed.
   failed counts with mean % compliance, broken down by season.
 - Select a single folder, then pick a `season · device` to see that recording's
   daily compliance and sleep measures.
+
+### Sending a selection to T2
+
+**SEND TO T2** (beside AGGREGATE) hands the selected folders to the T2 tab. It
+writes **no data** — only a record of what was chosen.
+
+1. Choose the **seasons**. These are seasons *of the year* — `Autumn 2025`,
+   `Winter 2025/26` — worked out from the dates the recordings actually cover,
+   not from the folder name. That matters: one person's folder may say
+   `Winter 2025` and another's `Winter 2026` for the same January. The number on
+   each chip is how many of the selected participants have data in that season.
+2. Choose the **devices** and, if you want fewer, the **variables** (every
+   variable in the data dictionary is listed with its unit and definition).
+3. Press **Check availability**. This reads the processed outputs and reports:
+   - each device's fully recorded days per participant-season, and the **common
+     window** where all the chosen devices overlap (the days a cross-device
+     comparison can actually use);
+   - **missing items** — a device with no output, a missing 60 s file, an output
+     file a chosen variable needs, or devices that never overlap. You can still
+     continue: those days or devices are simply absent from the preview.
+4. Tick the checks (the Actigraph 60 s outputs, and that you have reviewed the
+   verdicts), enter your **initials**, and send.
+
+The selection is recorded like a run: `T2-<yyyymmdd>-<hhmmss>-<initials>-s<seasons>`,
+public stripped record plus private detail (see `runs/README.md`). Unlike
+preprocess batches, T2 records **are** seasonal.
+
+### T2 tab
+
+T2 is a **preview**: it reads the processed outputs and writes nothing. Only
+Export (a later phase) will produce a dataset.
+
+- **Selections** (left) — everything sent from Visualise. ✕ archives one: it
+  leaves the list but both records are kept, with who archived it and when.
+  Archived selections can still be opened.
+- **Days** — the range of days within each participant-season's shared window
+  (day 1 = its first shared day), day by day, with shortcuts labelled by the days
+  they cover (`days 1–7`, `days 8–15`). Beside it, **drop part-days** leaves out
+  a first or last day that was only half recorded.
+The panel has four views: **Coverage** (what data exists), **Agreement** (do two
+measures in the same unit land on the same value), **Relationships** (does one
+measure move with another) and **Compare** (one measure across groups, seasons
+of the year, or people). Everything here already passed Visualise, so T2 does
+not re-check compliance — every recorded day is included.
+
+- **Availability** (Coverage) — the same coverage and flags as the send dialog, re-read
+  from the outputs each time (so it reflects anything reprocessed since).
+  Click a row to preview that participant-season.
+- **Timelines** — the chosen variables on one shared date axis, with the common
+  window shaded and the chosen weeks outlined. A filled dot is a valid day, a
+  hollow dot an invalid one, and a faded dot a partly recorded day; hover for
+  the date, value and window day. Up to 8 charts at a time — pick them with the
+  **Charts** chips. Season-level values (IS, IV, SRI, response rates) are
+  listed underneath.
+
+- **Cross-device** — one variable against another, which is what a cross-device
+  study is for. Pick x and y (from any device), then the **lag**:
+  - *same day* — both on the same calendar date;
+  - *that night* — y belongs to the night that starts on x's date;
+  - *next day* — y is the following date (a sleep diary is filled in the
+    morning after, so evening light usually pairs with the **next** day's diary).
+
+  Two correlations are always shown, never one, because each participant
+  contributes many days:
+  - **Between-person** — each person's mean x against their mean y: *do people
+    with more x tend to have more y?* n = participants.
+  - **Within-person** — each person's days after subtracting their own mean:
+    *on this person's higher-x days, is y higher too?* n = paired days, with an
+    effective n that accounts for the person means.
+  - **Median person r** — each person correlated separately, then the middle
+    value; a sanity check that one person isn't driving the result.
+
+  The scatter colours days by participant and marks each person's mean; the
+  tick box switches to the person-mean-centred (within-person) view. 95 % CIs
+  use the Fisher z transform with a normal approximation.
+
+  The **correlation matrix** runs every pair of the chosen variables at that
+  lag, starting with a spread across devices. Because many pairs are tested at
+  once, read **q** (Benjamini–Hochberg FDR) rather than p; bold means q < 0.05.
+  Click a cell to plot that pair. A cell shows "—" when there aren't enough
+  paired days or a variable doesn't vary. At most 12 variables per matrix.
+
+- **Seasons** — each variable per season number. Every cell is the mean of
+  participant means (so someone with more days doesn't count more) ± the spread
+  across participants, with how many participants contributed.
+
+- **Compare** — one measure, split by your **groups**, by **season of the
+  year**, by **participant**, or by visit number. Each bar is the average across
+  people (not days, so nobody counts twice) with a 95 % interval, and the
+  differences are listed underneath — worked out person by person when the same
+  people appear on both sides. Groups are made here by clicking a person to move
+  them between A, B, C and D; they are saved privately with the selection, and
+  no demographics are involved.
+
+- **Cut-offs** (beside the day range) — keep only days where a measure meets a
+  rule, e.g. `act_wear_hours ≥ 22`. The slider is sized from the data, and the
+  bar says how many days and people survive. This filters the numbers the tools
+  already produced, so nothing is reprocessed; thresholds that are *baked into*
+  those numbers (the light floor, the non-wear rule, the epoch length) are listed
+  as needing a Compliance re-run instead.
+- **Export…** — lists every file that would be written, with row and column
+  counts, the destination and what is included — the data tables, a dictionary,
+  a manifest, `report.pdf` with the charts, and a `reports/` folder holding the
+  device report PDFs for the seasons being exported. Nothing is written until you
+  enter the approver's initials and press Export; the folder then holds the data,
+  a dictionary, a README and a manifest recording who approved it, the thresholds
+  in force, each tool's version and a SHA-256 of every input file.
+
+All of these honour the day slider and the filters, and they are exploratory:
+they suggest what to look at, they don't test a pre-registered hypothesis.
+A between-person correlation needs at least three people, and a difference needs
+two on each side; otherwise a dash is shown with the reason.
+
+Participant IDs shown here are the real ones until pseudonymous IDs are
+approved and switched on; the pill by **Export** says which is in force.
 
 ---
 
@@ -411,7 +557,7 @@ run picks up where you left off.
 | The grid is empty | The source folder is wrong, or OneDrive hasn't synced | Check the path in the **⚙** panel — it reports whether each folder exists |
 | A download bar sits at 0% for ages | OneDrive isn't fetching the file | Check the OneDrive icon in the system tray: signed in, not paused, not out of disk space. Try opening the file in File Explorer to force a download |
 | `Timed out after 3600s downloading...` | The download took over an hour | Usually a OneDrive problem. Retry; if the connection is slow, raise `total_timeout_seconds` in `config.yaml` |
-| `Step 1 finished but expected output not found` | The epoching tool failed | Tick **show tool output** and re-run — the tool's own error will be in the log. Try `python setup_tools.py --update` |
+| `Step 1 finished but expected output not found` | The epoching tool failed | Tick **debug output** and re-run — the tool's own error will be in the log. Try `python setup_tools.py --update` |
 | A run says `cancelled` | You pressed STOP or shut the server down | Nothing is broken. Re-run to continue where it left off |
 | Everything is slow | Normal for a first run — the ~1 GB download and the epoching step dominate | Later runs skip finished work and are far quicker |
 
@@ -435,7 +581,7 @@ recording produced). Send the newest one to whoever maintains this project.
 | **PASS / REVIEW / FAIL** | Enough valid days / just short (worth a human look) / not enough |
 | **SVM** | A single number for how much movement happened in an epoch |
 | **Melanopic lux** | Light measured the way the body clock responds to it, rather than how bright it looks |
-| **CHECK** (dry run) | A preview that changes nothing: naming check plus what a run would do |
+| **Preview (dry run)** | A run mode that changes nothing: naming check plus what a run would do |
 | **Port 8000** | The "channel number" the dashboard uses on your own PC |
 
 ---

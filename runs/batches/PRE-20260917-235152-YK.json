@@ -1,0 +1,91 @@
+{
+  "schema_version": 1,
+  "batch_id": "PRE-20260917-235152-YK",
+  "stage": "PRE",
+  "stage_label": "staging -> master (preprocess)",
+  "mode": "new",
+  "mode_label": "new & unfinished",
+  "initials": "YK",
+  "source": "dashboard",
+  "started_at": "2026-09-17T23:51:52",
+  "finished_at": "2026-09-18T00:09:05",
+  "seconds": 1033.4,
+  "status": "done",
+  "n_participants": 1,
+  "items": {
+    "done": 11,
+    "skipped": 1
+  },
+  "items_by_device": {
+    "actigraph": {
+      "done": 4
+    },
+    "expiwell": {
+      "done": 4
+    },
+    "mieye": {
+      "done": 3,
+      "skipped": 1
+    }
+  },
+  "naming_flags": {
+    "skipped": 0,
+    "warning": 1,
+    "info": 21
+  },
+  "thresholds": {
+    "actigraph": {
+      "nonwear_axis_sd_g": 0.013,
+      "nonwear_min_minutes": 30,
+      "min_valid_hours": 10.0,
+      "min_valid_days": 3,
+      "review_margin_days": 1,
+      "min_diurnal_range_svm": 20.0,
+      "epochs_per_hour": 60,
+      "expected_wear_hours": 16.0,
+      "svm_column": "SVM_sum",
+      "time_column": "Time",
+      "axis_sd_columns": [
+        "Ax_sd",
+        "Ay_sd",
+        "Az_sd"
+      ],
+      "activity_threshold_svm": 5.0
+    },
+    "mieye": {
+      "min_valid_days": 3,
+      "review_margin_days": 1,
+      "light_floor_lx": 10.0,
+      "min_light_hours": 10.0,
+      "expected_light_hours": 10.0,
+      "dark_threshold_lx": 200.0,
+      "min_day_night_ratio": 2.0,
+      "channel": "melanopic",
+      "day_window": [
+        7,
+        19
+      ],
+      "night_window": [
+        23,
+        6
+      ],
+      "tat_threshold_lx": 250.0,
+      "tbt_threshold_lx": 10.0
+    },
+    "expiwell": {
+      "min_response_rate_pct": 70.0,
+      "review_margin_pct": 10.0,
+      "expected_days": 15,
+      "min_plausible_duration_sec": 5.0,
+      "custom_schedule": false
+    }
+  },
+  "tool_versions": {
+    "cd-compliance-checks": "c2edfe4",
+    "actigraphy-epoching": "2204833",
+    "actigraphy-sleep-metrics": "f7b2562",
+    "luminosity-metrics": "5178ea7",
+    "expiwell-metrics": "d3f731d"
+  },
+  "private_detail": "kept locally, not published"
+}

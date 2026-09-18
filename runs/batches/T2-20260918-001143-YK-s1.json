@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "batch_id": "T2-20260918-001143-YK-s1",
+  "stage": "T2",
+  "stage_label": "master -> T2",
+  "seasons": [
+    1
+  ],
+  "mode": "selection",
+  "mode_label": "sent to T2",
+  "initials": "YK",
+  "source": "dashboard",
+  "started_at": "2026-09-18T00:11:43",
+  "finished_at": "2026-09-18T00:11:43",
+  "seconds": 0.0,
+  "status": "sent",
+  "n_participants": 2,
+  "thresholds": {
+    "actigraph": {
+      "nonwear_axis_sd_g": 0.013,
+      "nonwear_min_minutes": 30,
+      "min_valid_hours": 10.0,
+      "min_valid_days": 3,
+      "review_margin_days": 1,
+      "min_diurnal_range_svm": 20.0,
+      "epochs_per_hour": 60,
+      "expected_wear_hours": 16.0,
+      "svm_column": "SVM_sum",
+      "time_column": "Time",
+      "axis_sd_columns": [
+        "Ax_sd",
+        "Ay_sd",
+        "Az_sd"
+      ],
+      "activity_threshold_svm": 5.0
+    },
+    "mieye": {
+      "min_valid_days": 3,
+      "review_margin_days": 1,
+      "light_floor_lx": 10.0,
+      "min_light_hours": 10.0,
+      "expected_light_hours": 10.0,
+      "dark_threshold_lx": 200.0,
+      "min_day_night_ratio": 2.0,
+      "channel": "melanopic",
+      "day_window": [
+        7,
+        19
+      ],
+      "night_window": [
+        23,
+        6
+      ],
+      "tat_threshold_lx": 250.0,
+      "tbt_threshold_lx": 10.0
+    },
+    "expiwell": {
+      "min_response_rate_pct": 70.0,
+      "review_margin_pct": 10.0,
+      "expected_days": 15,
+      "min_plausible_duration_sec": 5.0,
+      "custom_schedule": false
+    }
+  },
+  "tool_versions": {
+    "cd-compliance-checks": "c2edfe4",
+    "actigraphy-epoching": "2204833",
+    "actigraphy-sleep-metrics": "f7b2562",
+    "luminosity-metrics": "5178ea7",
+    "expiwell-metrics": "d3f731d"
+  },
+  "private_detail": "kept locally, not published",
+  "devices": [
+    "actigraph",
+    "mieye",
+    "expiwell"
+  ],
+  "variables": [
+    "act_wear_hours",
+    "act_pct_compliance",
+    "act_svm_mean",
+    "act_nonwear_hours",
+    "act_m10_hour",
+    "act_m10_activity",
+    "act_m10_activity_raw",
+    "act_l5_hour",
+    "act_l5_activity",
+    "act_l5_activity_raw",
+    "act_is",
+    "act_iv",
+    "act_sri",
+    "act_sri_days",
+    "act_pct_sleep",
+    "light_mel_mean",
+    "light_mel_median",
+    "light_mel_max",
+    "light_day_mean",
+    "light_night_mean",
+    "light_tat_min",
+    "light_tbt_min",
+    "light_log_mean",
+    "light_hours",
+    "light_pct_compliance",
+    "light_m5_onset",
+    "light_m5_level",
+    "light_m7_onset",
+    "light_m7_level",
+    "light_l2_onset",
+    "light_l2_level",
+    "diary_sol",
+    "diary_awakenings",
+    "diary_waso",
+    "diary_tib",
+    "diary_tst",
+    "diary_se",
+    "diary_quality",
+    "diary_restedness",
+    "affect_positive",
+    "affect_negative",
+    "esm_response_rate"
+  ],
+  "n_participant_seasons": 2,
+  "paired_days": 30,
+  "common_window_days": {
+    "min": 15,
+    "median": 15.0,
+    "max": 15
+  },
+  "availability_flags": {
+    "affect-date-from-series": 1
+  }
+}

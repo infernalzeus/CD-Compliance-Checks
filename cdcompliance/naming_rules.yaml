@@ -22,19 +22,19 @@ devices:
   actigraph:
     folder: Actigraph
     expected: 'CDXXX_wear position_SN_yyyy-mm-dd hh-mm-ss.bin'
-    example: 'CD079_left wrist_109267_2026-07-28 13-04-21.bin'
+    example: 'CD999_left wrist_100000_2026-01-05 09-00-00.bin'
     pattern: '^CD\d+_[A-Za-z ]+_\d+_\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}\.bin$'
 
   mieye:
     folder: MiEYE
     expected: 'Device CDXXX Sn-yyyy-mm-dd hh-mm-ss-logged.csv'
-    example: 'M92 CD079 S2-2026-03-18 16-39-05-logged.csv'
+    example: 'M00 CD999 S1-2026-01-05 09-00-00-logged.csv'
     pattern: '^M\d+ CD\d+ S\d-\d{4}-\d{2}-\d{2} \d{2}-\d{2}-\d{2}-logged\.csv$'
 
   expiwell:
     folder: Expiwell
     expected: 'CDXXX-Expiwell-Data-<Survey>.csv'
-    example: 'CD079-Expiwell-Data-Affect.csv'
+    example: 'CD999-Expiwell-Data-Affect.csv'
     pattern: '^CD\d+-Expiwell-Data-[A-Za-z0-9-]+\.csv$'
 
 rules:

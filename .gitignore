@@ -1,5 +1,6 @@
-# Per-run logs and summaries
-runs/
+# Run records: runs/batches/ holds PUBLIC stripped batch records and is committed.
+# Everything identifying (participants, paths, events) stays in runs/_private/.
+runs/_private/
 
 # Local machine config (keep config.example.yaml in git; config.yaml is local).
 # Comment this out if you want to version your active config.

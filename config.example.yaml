@@ -96,3 +96,12 @@ onedrive:
   total_timeout_seconds: 3600.0  # give up after this long waiting for a download
 
 runs_dir: 'runs'
+
+# Pseudonymous participant IDs - OFF until the hash design is approved.
+# When on, screens, T2 and records show a keyed HMAC-SHA256 code (e.g. P-3kq8…)
+# instead of CDxxx. The key file must live OUTSIDE this repository and be
+# shared only with the study team; without it codes can't be reversed or remade.
+privacy:
+  pseudonymise: false
+  key_file: ''        # e.g. a restricted study-drive path
+  prefix: P

@@ -38,7 +38,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
-from cdcompliance import manifest, naming, results, updates  # noqa: E402
+from cdcompliance import batches, manifest, naming, results, updates  # noqa: E402
+from cdcompliance import pseudo_id, t2_data, t2_selections, user_settings  # noqa: E402
 from cdcompliance.config import load_config  # noqa: E402
 from cdcompliance.devices import all_devices, implemented_devices  # noqa: E402
 from webapp.jobs import JobManager  # noqa: E402
@@ -50,32 +51,12 @@ app = FastAPI(title="CD-Compliance-Checks Dashboard")
 
 _config = load_config(CONFIG_PATH)
 
-# Per-install path overrides, editable from the UI and persisted across sessions.
-_SETTINGS_PATH = Path(os.environ.get("CDCC_SETTINGS", _ROOT / "runtime_settings.json"))
+# Folder choices from the ⚙ panel, saved per user (see cdcompliance.user_settings).
+# A settings file left in the app folder by older versions is migrated once.
+_LEGACY_SETTINGS = _ROOT / "runtime_settings.json"
+_SETTINGS_PATH = user_settings.apply(_config, legacy_file=_LEGACY_SETTINGS)
 
 
-def _apply_runtime_settings() -> None:
-    if not _SETTINGS_PATH.exists():
-        return
-    try:
-        data = json.loads(_SETTINGS_PATH.read_text(encoding="utf-8"))
-        if data.get("source_root"):
-            _config.paths.source_root = Path(data["source_root"])
-        if data.get("output_root"):
-            _config.paths.output_root = Path(data["output_root"])
-        if data.get("epoching_repo"):
-            _config.tools.epoching_repo = Path(data["epoching_repo"])
-        if data.get("sleep_metrics_repo"):
-            _config.tools.sleep_metrics_repo = Path(data["sleep_metrics_repo"])
-        if data.get("luminosity_repo"):
-            _config.tools.luminosity_repo = Path(data["luminosity_repo"])
-        if data.get("expiwell_repo"):
-            _config.tools.expiwell_repo = Path(data["expiwell_repo"])
-    except Exception as exc:  # bad settings file must not stop startup
-        print(f"[settings] could not load {_SETTINGS_PATH}: {exc}")
-
-
-_apply_runtime_settings()
 _jobs = JobManager(_config)
 
 
@@ -220,25 +201,7 @@ def api_component_install(payload: dict) -> JSONResponse:
 
 
 def _persist_settings() -> bool:
-    try:
-        _SETTINGS_PATH.write_text(
-            json.dumps(
-                {
-                    "source_root": str(_config.paths.source_root),
-                    "output_root": str(_config.paths.output_root),
-                    "epoching_repo": str(_config.tools.epoching_repo),
-                    "sleep_metrics_repo": str(_config.tools.sleep_metrics_repo),
-                    "luminosity_repo": str(_config.tools.luminosity_repo),
-                    "expiwell_repo": str(_config.tools.expiwell_repo),
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-        return True
-    except Exception as exc:
-        print(f"[settings] could not persist: {exc}")
-        return False
+    return user_settings.save(_config)
 
 
 @app.post("/api/components/path")
@@ -270,60 +233,32 @@ def api_get_settings() -> JSONResponse:
 
 @app.post("/api/settings")
 def api_set_settings(payload: dict) -> JSONResponse:
-    def _clean(key):
-        return (payload.get(key) or "").strip().strip('"')
-
-    src, out = _clean("source_root"), _clean("output_root")
-    e1, e2 = _clean("epoching_repo"), _clean("sleep_metrics_repo")
-    e3, e4 = _clean("luminosity_repo"), _clean("expiwell_repo")
-    if src:
-        _config.paths.source_root = Path(src)
-    if out:
-        _config.paths.output_root = Path(out)
-    if e1:
-        _config.tools.epoching_repo = Path(e1)
-    if e2:
-        _config.tools.sleep_metrics_repo = Path(e2)
-    if e3:
-        _config.tools.luminosity_repo = Path(e3)
-    if e4:
-        _config.tools.expiwell_repo = Path(e4)
-    saved = True
-    try:
-        _SETTINGS_PATH.write_text(
-            json.dumps(
-                {
-                    "source_root": str(_config.paths.source_root),
-                    "output_root": str(_config.paths.output_root),
-                    "epoching_repo": str(_config.tools.epoching_repo),
-                    "sleep_metrics_repo": str(_config.tools.sleep_metrics_repo),
-                    "luminosity_repo": str(_config.tools.luminosity_repo),
-                    "expiwell_repo": str(_config.tools.expiwell_repo),
-                },
-                indent=2,
-            ),
-            encoding="utf-8",
-        )
-    except Exception as exc:
-        saved = False
-        print(f"[settings] could not persist: {exc}")
+    user_settings.update(_config, payload or {})
     result = _settings_payload()
-    result["persisted"] = saved
+    result["persisted"] = _persist_settings()
     return JSONResponse(result)
 
 
 def _settings_payload() -> dict:
+    p, t = _config.paths, _config.tools
     return {
-        "source_root": str(_config.paths.source_root),
-        "output_root": str(_config.paths.output_root),
-        "source_exists": _config.paths.source_root.exists(),
-        "output_exists": _config.paths.output_root.exists(),
-        "epoching_repo": str(_config.tools.epoching_repo),
-        "sleep_metrics_repo": str(_config.tools.sleep_metrics_repo),
-        "epoching_exists": _config.tools.epoching_repo.exists(),
-        "sleep_metrics_exists": _config.tools.sleep_metrics_repo.exists(),
-        "luminosity_repo": str(_config.tools.luminosity_repo),
-        "expiwell_repo": str(_config.tools.expiwell_repo),
+        "source_root": str(p.source_root),
+        "output_root": str(p.output_root),
+        "t2_root": str(p.t2_root),
+        "source_exists": p.source_root.exists(),
+        "output_exists": p.output_root.exists(),
+        "t2_exists": p.t2_root.exists(),
+        "epoching_repo": str(t.epoching_repo),
+        "sleep_metrics_repo": str(t.sleep_metrics_repo),
+        "epoching_exists": t.epoching_repo.exists(),
+        "sleep_metrics_exists": t.sleep_metrics_repo.exists(),
+        "luminosity_repo": str(t.luminosity_repo),
+        "expiwell_repo": str(t.expiwell_repo),
+        # Shown in the ⚙ panel so people know their choices are theirs alone.
+        "settings_file": str(user_settings.settings_path()),
+        "settings_saved_at": user_settings.saved_at(),
+        "settings_error": user_settings.last_error,
+        "initials": user_settings.get_text("initials"),
     }
 
 
@@ -447,8 +382,255 @@ async def api_run(payload: dict) -> JSONResponse:
     dry_run = bool(payload.get("dry_run", False))
     if not participants:
         return JSONResponse({"error": "no participants selected"}, status_code=400)
-    job = _jobs.submit(participants, force, dry_run)
+    # Any run that writes data is a recorded batch and must say who ran it.
+    initials = batches.normalise_initials(payload.get("initials"))
+    if not dry_run and initials is None:
+        return JSONResponse({"error": "initials required (2-4 letters) for a run that writes data"},
+                            status_code=400)
+    if initials:
+        user_settings.set_text("initials", initials)   # remembered for this user
+        _persist_settings()
+    job = _jobs.submit(participants, force, dry_run, initials or "")
     return JSONResponse({"job_id": job.id, "job": job.info()})
+
+
+@app.get("/api/batches")
+def api_batches(archived: int = 0, stage: str = "PRE") -> JSONResponse:
+    """Batches of one stage, newest first (public stripped records)."""
+    return JSONResponse({"batches": batches.list_batches(_config, include_archived=bool(archived),
+                                                         stage=stage or None)})
+
+
+@app.post("/api/batches/{batch_id}/archive")
+def api_batch_archive(batch_id: str, payload: dict) -> JSONResponse:
+    """Hide a batch from the list; both records are kept with who/when."""
+    try:
+        rec = batches.archive_batch(_config, batch_id, (payload or {}).get("initials", ""))
+    except FileNotFoundError:
+        return JSONResponse({"error": "batch not found"}, status_code=404)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return JSONResponse({"ok": True, "archived": rec.get("archived")})
+
+
+# ---------------------------------------------------------------------------
+# T2: Visualise -> T2 hand-off (writes a record only) and read-only preview
+# ---------------------------------------------------------------------------
+_PID_RE = __import__("re").compile(r"^[A-Za-z0-9_-]{1,32}$")
+
+
+def _t2_payload(payload: dict) -> dict:
+    payload = dict(payload or {})
+    payload["participants"] = [p for p in payload.get("participants", []) if p and _PID_RE.match(p)]
+    return payload
+
+
+@app.get("/api/t2/dictionary")
+def api_t2_dictionary() -> JSONResponse:
+    """Every variable T2 can select, with unit, definition and timing."""
+    return JSONResponse({"variables": t2_data.variables(), "checks": t2_selections.USER_CHECKS})
+
+
+@app.get("/api/privacy")
+def api_privacy() -> JSONResponse:
+    """Whether pseudonymous IDs are on (never returns the key)."""
+    return JSONResponse(pseudo_id.status(_config))
+
+
+@app.get("/api/participant/{pid}/seasons")
+def api_participant_seasons(pid: str) -> JSONResponse:
+    """Season folders numbered 1..n by the dates their data covers."""
+    if not _PID_RE.match(pid):
+        return JSONResponse({"error": "invalid participant"}, status_code=400)
+    return JSONResponse({"participant": pid, "seasons": t2_data.season_numbers(_config, pid)})
+
+
+@app.post("/api/t2/seasons")
+def api_t2_seasons(payload: dict) -> JSONResponse:
+    """The calendar seasons these participants have data in, with counts.
+
+    Keyed on the season of the year the recordings fall in - folder labels
+    disagree between participants, and one person's 2nd season is another's 3rd.
+    """
+    seasons: dict = {}
+    numbers: dict = {}
+    for pid in _t2_payload(payload)["participants"]:
+        for folder, info in t2_data.season_numbers(_config, pid).items():
+            numbers[info["n"]] = numbers.get(info["n"], 0) + 1
+            key = info.get("season_key")
+            if not key:
+                continue
+            entry = seasons.setdefault(key, {"key": key, "label": info.get("season_label"),
+                                             "code": info.get("season_code"), "n_participants": 0,
+                                             "estimated": 0, "folders": []})
+            entry["n_participants"] += 1
+            if info.get("basis") != "data":
+                entry["estimated"] += 1
+            if folder not in entry["folders"]:
+                entry["folders"].append(folder)
+    return JSONResponse({
+        "seasons": sorted(seasons.values(), key=lambda e: e["key"]),
+        "season_counts": {str(k): v for k, v in sorted(numbers.items())},
+    })
+
+
+@app.post("/api/t2/availability")
+def api_t2_availability(payload: dict) -> JSONResponse:
+    """Cross-device check between Visualise and T2 (no data values returned)."""
+    sel = t2_selections.normalise(_t2_payload(payload))
+    if not sel.participants:
+        return JSONResponse({"error": "no participants selected"}, status_code=400)
+    try:
+        return JSONResponse(t2_selections.summary(_config, sel, for_handoff=True))
+    except pseudo_id.PseudoIdError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+
+@app.post("/api/t2/selections")
+def api_t2_send(payload: dict) -> JSONResponse:
+    """Send a Visualise selection to T2: records it in runs/, writes no data."""
+    try:
+        public = t2_selections.create(_config, _t2_payload(payload))
+    except (t2_selections.SelectionError, pseudo_id.PseudoIdError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    initials = batches.normalise_initials((payload or {}).get("initials"))
+    if initials:
+        user_settings.set_text("initials", initials)
+        _persist_settings()
+    return JSONResponse({"ok": True, "selection": public})
+
+
+@app.get("/api/t2/selections")
+def api_t2_selections(archived: int = 0) -> JSONResponse:
+    return JSONResponse({"selections": t2_selections.list_selections(_config, bool(archived))})
+
+
+@app.get("/api/t2/selections/{batch_id}")
+def api_t2_selection(batch_id: str) -> JSONResponse:
+    """A selection's definition plus a fresh availability summary."""
+    try:
+        record, sel = t2_selections.load_selection(_config, batch_id)
+        info = t2_selections.summary(_config, sel)
+    except FileNotFoundError:
+        return JSONResponse({"error": "no local detail for this selection (sent from another computer?)"},
+                            status_code=404)
+    except (t2_selections.SelectionError, pseudo_id.PseudoIdError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    head = {k: record.get(k) for k in ("batch_id", "name", "initials", "started_at", "seasons",
+                                       "devices", "variables", "status", "checks")}
+    return JSONResponse({"record": head, "summary": info,
+                         "same_unit": t2_selections.same_unit_pairs(sel)})
+
+
+@app.post("/api/t2/selections/{batch_id}/archive")
+def api_t2_selection_archive(batch_id: str, payload: dict) -> JSONResponse:
+    t2_selections.forget(batch_id)
+    return api_batch_archive(batch_id, payload)
+
+
+@app.post("/api/t2/timeline")
+def api_t2_timeline(payload: dict) -> JSONResponse:
+    """Day-level series for one participant-season of a selection (preview only)."""
+    payload = payload or {}
+    try:
+        _record, sel = t2_selections.load_selection(_config, str(payload.get("selection", "")))
+        data = t2_selections.timeline(_config, sel, str(payload.get("display_id", "")),
+                                      int(payload.get("season_n", 0)))
+    except FileNotFoundError:
+        return JSONResponse({"error": "selection not found"}, status_code=404)
+    except (t2_selections.SelectionError, pseudo_id.PseudoIdError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    return JSONResponse(data)
+
+
+def _t2_view(payload: dict, fn):
+    payload = payload or {}
+    batch_id = str(payload.get("selection", ""))
+    try:
+        _record, sel = t2_selections.load_selection(_config, batch_id)
+        return JSONResponse(fn(_config, batch_id, sel, payload))
+    except FileNotFoundError:
+        return JSONResponse({"error": "selection not found"}, status_code=404)
+    except (t2_selections.SelectionError, pseudo_id.PseudoIdError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+
+@app.post("/api/t2/scatter")
+def api_t2_scatter(payload: dict) -> JSONResponse:
+    """Cross-device scatter + within/between correlations (preview only)."""
+    return _t2_view(payload, t2_selections.scatter)
+
+
+@app.post("/api/t2/matrix")
+def api_t2_matrix(payload: dict) -> JSONResponse:
+    """Correlation matrix across the chosen variables, FDR-corrected."""
+    return _t2_view(payload, t2_selections.matrix)
+
+
+@app.post("/api/t2/cutoffs")
+def api_t2_cutoffs(payload: dict) -> JSONResponse:
+    """Slider bounds per measure, and what the current cut-offs leave behind."""
+    return _t2_view(payload, t2_selections.cutoff_options)
+
+
+@app.post("/api/t2/export/preview")
+def api_t2_export_preview(payload: dict) -> JSONResponse:
+    """Exactly which files would be written, before anything is written."""
+    return _t2_view(payload, t2_selections.export_preview)
+
+
+@app.post("/api/t2/export")
+def api_t2_export(payload: dict) -> JSONResponse:
+    """Write the dataset. The only step in T2 that produces files."""
+    return _t2_view(payload, t2_selections.export_write)
+
+
+@app.post("/api/t2/overlap")
+def api_t2_overlap(payload: dict) -> JSONResponse:
+    """Do two same-unit measures land on the same value each day?"""
+    return _t2_view(payload, t2_selections.overlap)
+
+
+@app.post("/api/t2/compare")
+def api_t2_compare(payload: dict) -> JSONResponse:
+    """Compare one variable across groups, calendar seasons or participants."""
+    return _t2_view(payload, t2_selections.compare)
+
+
+@app.get("/api/t2/selections/{batch_id}/groups")
+def api_t2_groups(batch_id: str) -> JSONResponse:
+    try:
+        record, sel = t2_selections.load_selection(_config, batch_id)
+        ids = pseudo_id.mapping(_config, sel.participants)
+    except FileNotFoundError:
+        return JSONResponse({"error": "selection not found"}, status_code=404)
+    except (t2_selections.SelectionError, pseudo_id.PseudoIdError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    groups = record.get("groups") or {}
+    return JSONResponse({
+        "groups": {name: [ids.get(p, p) for p in members] for name, members in groups.items()},
+        "participants": [ids.get(p, p) for p in sel.participants],
+    })
+
+
+@app.post("/api/t2/selections/{batch_id}/groups")
+def api_t2_set_groups(batch_id: str, payload: dict) -> JSONResponse:
+    """Save the groups made in T2 (local record only, never the public one)."""
+    try:
+        groups = t2_selections.set_groups(_config, batch_id, (payload or {}).get("groups") or {})
+    except FileNotFoundError:
+        return JSONResponse({"error": "selection not found"}, status_code=404)
+    except (t2_selections.SelectionError, pseudo_id.PseudoIdError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    ids = pseudo_id.mapping(_config, [p for members in groups.values() for p in members])
+    return JSONResponse({"ok": True,
+                         "groups": {n: [ids.get(p, p) for p in m] for n, m in groups.items()}})
+
+
+@app.post("/api/t2/seasons-summary")
+def api_t2_seasons_summary(payload: dict) -> JSONResponse:
+    """Per-season summary of each variable (means of participant means)."""
+    return _t2_view(payload, t2_selections.seasons_view)
 
 
 @app.post("/api/shutdown")

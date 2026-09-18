@@ -33,7 +33,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from cdcompliance import pipeline, tools  # noqa: E402
+from cdcompliance import batches, naming, pipeline, tools  # noqa: E402
 from cdcompliance.config import RunSelection, load_config  # noqa: E402
 from cdcompliance.devices import all_devices, implemented_devices  # noqa: E402
 from cdcompliance.events import make_default_bus  # noqa: E402
@@ -83,6 +83,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Reprocess items even if their output already exists (default: skip).",
     )
     p.add_argument(
+        "--initials",
+        default=None,
+        help="Your initials (2-4 letters). Required for runs that write data; "
+             "recorded on the batch.",
+    )
+    p.add_argument(
         "--quiet",
         action="store_true",
         help="Less console detail (suppress per-line tool stdout).",
@@ -124,39 +130,56 @@ def main(argv: list[str] | None = None) -> int:
     )
     resolved = selection.resolve(config)
 
-    # Per-run log directory: runs/<participant>_<timestamp>/
-    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    run_dir = config.runs_dir / f"{resolved.participant}_{stamp}"
-    run_dir.mkdir(parents=True, exist_ok=True)
-    events_path = run_dir / "events.jsonl"
-
-    bus, sinks = make_default_bus(
-        jsonl_path=events_path, verbose=not args.quiet, console=True
-    )
+    initials = batches.normalise_initials(args.initials)
+    if not args.dry_run and initials is None:
+        print("A run that writes data needs --initials (2-4 letters), e.g. --initials YK",
+              file=sys.stderr)
+        return 2
 
     # Ctrl+C sets this, so an in-progress OneDrive hydration or copy aborts
     # instead of running to completion while the traceback is already printing.
     cancel_event = threading.Event()
+    recorder = None
+    sinks: list = []
 
     try:
         if args.dry_run:
+            # Previews write nothing to the batch records; the plan is kept locally.
+            bus, sinks = make_default_bus(jsonl_path=None, verbose=not args.quiet, console=True)
             plan = pipeline.plan(config, resolved, bus)
-            (run_dir / "plan.json").write_text(
-                json.dumps(plan, indent=2), encoding="utf-8"
-            )
-            print(f"\nDry-run plan written to: {run_dir / 'plan.json'}")
+            preview_dir = batches.private_dir(config) / "previews"
+            preview_dir.mkdir(parents=True, exist_ok=True)
+            out = preview_dir / f"{datetime.now():%Y%m%d-%H%M%S}-plan.json"
+            out.write_text(json.dumps(plan, indent=2), encoding="utf-8")
+            print(f"\nDry-run plan written to: {out}")
             return 0
 
-        result = pipeline.run(
-            config, resolved, bus, run_dir=run_dir, cancel_event=cancel_event
+        recorder = batches.BatchRecorder(
+            config, stage="PRE", mode="force" if args.force else "new",
+            initials=initials, participants=[resolved.participant], source="cli",
         )
+        bus, sinks = make_default_bus(jsonl_path=None, verbose=not args.quiet, console=True)
+        bus.subscribe(recorder)
+        result = pipeline.run(config, resolved, bus, cancel_event=cancel_event)
+        try:
+            flags = naming.summarise(naming.check_participant(config, resolved.participant))
+        except Exception:
+            flags = None
+        recorder.add_result(result, flags)
+        record = recorder.finish("done")
         counts = result.counts
-        print(f"\nRun summary written to: {run_dir / 'run_summary.json'}")
-        print(f"Events log: {events_path}")
+        print(f"\nBatch {recorder.id}: {record['items']}")
+        print(f"  public record : {batches.public_dir(config) / (recorder.id + '.json')}")
+        print(f"  private detail: {batches.private_dir(config) / recorder.id}")
         # Exit non-zero if anything failed, so schedulers/CI can detect it.
         return 1 if counts.get("failed", 0) else 0
     except KeyboardInterrupt:
         cancel_event.set()
+        if recorder is not None:
+            try:
+                recorder.finish("cancelled")
+            except Exception:
+                pass
         killed = tools.terminate_all()
         print(
             f"\nInterrupted — cancelled the run"

@@ -55,6 +55,10 @@ class ToolsConfig:
     expiwell_repo_url: str = "https://github.com/infernalzeus/expiwell-metrics.git"
 
 
+#: Default T2 location for the CHiP-D team; each user can change it in the ⚙ panel.
+DEFAULT_T2_ROOT = r"N:\CSI\Lab Files\CHiP - D\T2 Output Test"
+
+
 @dataclass
 class PathsConfig:
     # Parent folder that contains participant folders (CD011, CD012, ...).
@@ -62,6 +66,8 @@ class PathsConfig:
     # Dashboard output tree root. Outputs land in
     #   <output_root>/<participant>/<season>/<Device>/
     output_root: Path
+    # Where approved, curated T2 datasets are saved (set per user from the ⚙ panel).
+    t2_root: Path = Path(r"N:\CSI\Lab Files\CHiP - D\T2 Output Test")
 
 
 @dataclass
@@ -163,6 +169,21 @@ class ExpiwellComplianceConfig:
 
 
 @dataclass
+class PrivacyConfig:
+    """Pseudonymous participant IDs (see ``cdcompliance/pseudo_id.py``).
+
+    OFF until the hash architecture is approved: every screen, record and export
+    keeps the real participant ID. When switched on, IDs are replaced by a keyed
+    HMAC-SHA256 code; the key lives in ``key_file`` (outside the repo, shared by
+    the study team) - without it the codes cannot be reversed or reproduced.
+    """
+
+    pseudonymise: bool = False
+    key_file: str = ""
+    prefix: str = "P"
+
+
+@dataclass
 class OneDriveConfig:
     poll_interval_seconds: float = 1.0
     stall_timeout_seconds: float = 30.0
@@ -177,6 +198,7 @@ class Config:
     luminosity: LuminosityComplianceConfig = field(default_factory=LuminosityComplianceConfig)
     expiwell: ExpiwellComplianceConfig = field(default_factory=ExpiwellComplianceConfig)
     onedrive: OneDriveConfig = field(default_factory=OneDriveConfig)
+    privacy: PrivacyConfig = field(default_factory=PrivacyConfig)
 
     # Run defaults (overridable per run / via CLI).
     participant: str = "CD011"
@@ -189,6 +211,10 @@ class Config:
     mieye_input_glob: str = "*-logged.csv"
     expiwell_folder_name: str = "Expiwell"
     expiwell_input_glob: str = "*Expiwell*.csv"
+    # Season-level paperwork copied verbatim into the output tree (never parsed
+    # by the pipeline): the assessment log lists the devices expected that
+    # season, their start dates and the participant's day-by-day schedule.
+    season_document_globs: tuple = ("*Assessment*Log*.xls*",)
 
     # Directory (created if absent) for per-run event logs and summaries.
     runs_dir: Path = Path("runs")
@@ -224,12 +250,14 @@ def load_config(config_path: Path) -> Config:
     lum_raw = raw.get("luminosity") or {}
     xpw_raw = raw.get("expiwell") or {}
     od_raw = raw.get("onedrive") or {}
+    priv_raw = raw.get("privacy") or {}
 
     # source/output are inherently machine-specific (OneDrive paths); if unset the
     # app still boots — the grid is empty and the ⚙ panel prompts for them.
     paths = PathsConfig(
         source_root=_as_path(paths_raw.get("source_root") or "unset-source-root", base),
         output_root=_as_path(paths_raw.get("output_root") or "unset-output-root", base),
+        t2_root=_as_path(paths_raw.get("t2_root") or DEFAULT_T2_ROOT, base),
     )
     tools = ToolsConfig(
         epoching_repo=_as_path(tools_raw.get("epoching_repo") or (parent / "actigraphy-epoching"), base),
@@ -269,6 +297,10 @@ def load_config(config_path: Path) -> Config:
         **{k: v for k, v in od_raw.items() if k in _field_names(OneDriveConfig)}
     )
 
+    privacy = PrivacyConfig(
+        **{k: v for k, v in priv_raw.items() if k in _field_names(PrivacyConfig)}
+    )
+
     runs_dir = raw.get("runs_dir", "runs")
     return Config(
         paths=paths,
@@ -277,6 +309,7 @@ def load_config(config_path: Path) -> Config:
         luminosity=luminosity,
         expiwell=expiwell,
         onedrive=onedrive,
+        privacy=privacy,
         participant=raw.get("participant", "CD011"),
         devices=list(raw.get("devices", [DEVICE_ACTIGRAPH])),
         seasons=raw.get("seasons"),
@@ -287,6 +320,7 @@ def load_config(config_path: Path) -> Config:
         mieye_input_glob=raw.get("mieye_input_glob", "*-logged.csv"),
         expiwell_folder_name=raw.get("expiwell_folder_name", "Expiwell"),
         expiwell_input_glob=raw.get("expiwell_input_glob", "*Expiwell*.csv"),
+        season_document_globs=tuple(raw.get("season_document_globs", ("*Assessment*Log*.xls*",))),
         runs_dir=_as_path(runs_dir, base),
     )
 

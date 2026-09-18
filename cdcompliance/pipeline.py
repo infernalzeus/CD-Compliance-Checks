@@ -12,6 +12,7 @@ downloading, processing, or writing anything.
 from __future__ import annotations
 
 import json
+import shutil
 import time
 from datetime import datetime
 from pathlib import Path
@@ -51,11 +52,23 @@ def plan(config: Config, selection: ResolvedSelection, bus: EventBus) -> dict[st
                 f"      size={gb:.2f} GB  local={od.get('pct_local', 0):.1f}%  "
                 f"needs_download={od.get('dehydrated')}"
             )
+    documents = []
+    seen: set[tuple[str, str]] = set()
+    for it in items:
+        key = (it.participant, it.season)
+        if key in seen or it.output_dir is None:
+            continue
+        seen.add(key)
+        for pattern in config.season_document_globs:
+            for doc in sorted(Path(it.source_dir).parent.glob(pattern)):
+                documents.append(doc.name)
+                bus.log(f"PLAN copy: {doc.name} -> {Path(it.output_dir).parent}")
     return {
         "participant": selection.participant,
         "copy_bin": selection.copy_bin,
         "devices": selection.devices,
         "items": planned,
+        "documents": documents,
     }
 
 
@@ -84,6 +97,7 @@ def run(
 
     items = discovery.discover(config, resolved, bus)
     bus.emit("run_start", participant=resolved.participant, n_items=len(items))
+    copy_season_documents(config, items, bus, cancel_event=cancel_event)
 
     cancelled = False
     for item in items:
@@ -137,6 +151,48 @@ def run(
     if run_dir is not None:
         _write_run_summary(run_dir, result)
     return result
+
+
+def copy_season_documents(config: Config, items, bus: EventBus, cancel_event=None) -> list[Path]:
+    """Copy each season's loose paperwork (assessment log) beside its results.
+
+    One copy per participant-season, skipped when the destination is already
+    up to date. Failures are reported and never stop a run: the log is context,
+    not an input the results depend on.
+    """
+    copied: list[Path] = []
+    seen: set[tuple[str, str]] = set()
+    for item in items:
+        key = (item.participant, item.season)
+        if key in seen or item.output_dir is None:
+            continue
+        seen.add(key)
+        season_src = Path(item.source_dir).parent      # <staging>/<CDxxx>/<Season>
+        season_out = Path(item.output_dir).parent      # <output>/<CDxxx>/<Season>
+        for pattern in config.season_document_globs:
+            for doc in sorted(season_src.glob(pattern)):
+                if not doc.is_file():
+                    continue
+                dest = season_out / doc.name
+                try:
+                    if dest.exists() and dest.stat().st_mtime >= doc.stat().st_mtime:
+                        continue
+                    onedrive.ensure_local(
+                        doc, bus,
+                        poll_interval=config.onedrive.poll_interval_seconds,
+                        stall_timeout=config.onedrive.stall_timeout_seconds,
+                        total_timeout=config.onedrive.total_timeout_seconds,
+                        cancel_event=cancel_event,
+                    )
+                    season_out.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(doc, dest)
+                    copied.append(dest)
+                    bus.emit("document_copied", label=f"{item.participant} / {item.season}",
+                             name=doc.name)
+                    bus.log(f"copied {doc.name} -> {season_out}")
+                except (OSError, onedrive.DownloadCancelled) as exc:
+                    bus.log(f"could not copy {doc.name}: {exc}", level="warning")
+    return copied
 
 
 def _append_summary(config: Config, item_result) -> None:

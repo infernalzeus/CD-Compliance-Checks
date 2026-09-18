@@ -133,7 +133,7 @@ class ActigraphProcessor(DeviceProcessor):
         bin_path = Path(item.input_path)
         output_dir = Path(item.output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
-        stem = bin_path.stem  # e.g. "CD011_left wrist_109248_2025-12-02 10-42-59"
+        stem = bin_path.stem  # e.g. "CD999_left wrist_100000_2026-01-05 09-00-00"
 
         force = selection.force
         epoch_csv = output_dir / f"{stem}_60s.csv"

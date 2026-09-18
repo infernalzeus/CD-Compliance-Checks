@@ -1,0 +1,460 @@
+# T2 data dictionary - every variable T2 can select, preview and export.
+#
+# Drives the Visualise selector, the T2 preview (cdcompliance/t2_data.py) and
+# ships with every export as dictionary.csv. Output columns NOT listed here are
+# reported by `t2_data.unlisted_columns` so a new tool column never goes unnoticed.
+#
+# sources   - output files per device folder (<output>/<CDxxx>/<Season>/<Device>/)
+#   glob       filename pattern inside the device folder
+#   level      day | season
+#   date       column holding the calendar date (day level)
+#   timestamp  column holding the response time (used when there is no date)
+#   meta       columns that are identifiers/bookkeeping, not variables
+#
+# variables
+#   timing     how a row's date maps to the night key (night_of = the EVENING
+#              the night starts):
+#                day            daytime measure; night_of left empty
+#                noon_to_noon   row covers noon D -> noon D+1; night_of = D
+#                diary_morning  reported the morning after; night_of = D - 1
+#                onset_hour     night_of = D if <onset> hour >= 12 else D - 1
+#   agg        how several rows on one date combine (momentary surveys): mean | sum | first
+#   valid_from source + column holding that device-day's valid flag
+
+version: 1
+
+sources:
+  actigraph_daily:
+    device: actigraph
+    glob: '*_60s_daily.csv'
+    level: day
+    date: date
+    meta: [fname]
+  actigraph_daily_compliance:
+    device: actigraph
+    glob: '*_60s_daily_compliance.csv'
+    level: day
+    date: date
+    meta: [epochs, invalid_reason, hourly_svm_range, within_day_svm_sd, valid_day]
+    full_day_epochs: 1440
+  actigraph_nonparametric:
+    device: actigraph
+    glob: '*_60s_nonparametric.csv'
+    level: season
+    meta: [fname, processing_timestamp, M10_hour, M10_mean_activity, L5_hour, L5_mean_activity]
+  actigraph_sri:
+    device: actigraph
+    glob: '*_60s_sri.csv'
+    level: season
+    meta: [fname, n_valid_epoch_pairs, epoch_sec, classifier, ck_scale, ck_threshold, activity_normalization]
+
+  mieye_metrics:
+    device: mieye
+    glob: '*_luminosity_metrics.csv'
+    level: day
+    date: date
+    meta: [n_epochs]
+  mieye_windows:
+    device: mieye
+    glob: '*_light_windows.csv'
+    level: day
+    date: date
+    meta: [hours_with_data]
+  mieye_daily_compliance:
+    device: mieye
+    glob: '*_daily_compliance.csv'
+    level: day
+    date: date
+    meta: [epochs, invalid_reason, valid_day, day_mean, night_mean, melanopic_mean, tat_min, tbt_min, log_mean, day_night_ratio]
+    full_day_epochs: 1440
+
+  expiwell_sleep:
+    device: expiwell
+    glob: '*_expiwell_sleep_metrics.csv'
+    level: day
+    date: date
+    meta: [participant, survey, day, into_bed, lights_out, final_wake, out_of_bed, TST_hours]
+  expiwell_affect:
+    device: expiwell
+    glob: '*_expiwell_affect.csv'
+    level: day
+    date: date
+    timestamp: timestamp
+    # Older outputs have no date/timestamp: fall back to the item series, which
+    # carries each response's real time keyed on (survey, day, occasion).
+    timestamp_fallback: {glob: '*_expiwell_item_series.csv', keys: [survey, day, occasion], column: timestamp}
+    meta: [participant, survey, day, occasion, n_positive_items, n_negative_items]
+  expiwell_metrics:
+    device: expiwell
+    glob: '*_expiwell_metrics.csv'
+    level: season
+    per: survey
+    meta: [survey, type, scored, expected, completed, missed, days_expected, days_with_response,
+           complete_days, median_latency_min, pct_within_window, median_duration_sec, detected_type, n_distinct_windows]
+
+variables:
+  # ---------------------------------------------------------------- Actigraph
+  - id: act_wear_hours
+    device: actigraph
+    level: day
+    source: actigraph_daily_compliance
+    column: wear_hours
+    unit: h
+    timing: day
+    valid_from: {source: actigraph_daily_compliance, column: valid_day}
+    definition: Hours worn that day (non-wear = sustained runs of near-zero acceleration SD).
+  - id: act_pct_compliance
+    device: actigraph
+    level: day
+    source: actigraph_daily_compliance
+    column: pct_compliance
+    unit: '%'
+    timing: day
+    valid_from: {source: actigraph_daily_compliance, column: valid_day}
+    definition: Wear hours as a percentage of the expected wear hours (threshold in force).
+  - id: act_svm_mean
+    device: actigraph
+    level: day
+    source: actigraph_daily_compliance
+    column: svm_mean
+    unit: g·s/min
+    timing: day
+    valid_from: {source: actigraph_daily_compliance, column: valid_day}
+    definition: Mean per-minute signal vector magnitude (SVM_sum) for the day.
+  - id: act_nonwear_hours
+    device: actigraph
+    level: day
+    source: actigraph_daily_compliance
+    column: nonwear_hours
+    unit: h
+    timing: day
+    valid_from: {source: actigraph_daily_compliance, column: valid_day}
+    definition: Hours classed as non-wear that day.
+  - id: act_m10_hour
+    device: actigraph
+    level: day
+    source: actigraph_daily
+    column: M10_hour
+    unit: clock hour
+    timing: noon_to_noon
+    valid_from: {source: actigraph_daily_compliance, column: valid_day}
+    definition: Midpoint clock hour of the most active 10 h, in the noon-to-noon window starting that date.
+  - id: act_m10_activity
+    device: actigraph
+    level: day
+    source: actigraph_daily
+    column: M10_mean_activity
+    unit: SVM
+    timing: noon_to_noon
+    valid_from: {source: actigraph_daily_compliance, column: valid_day}
+    definition: Smoothed (10 h rolling) mean activity at the M10 midpoint.
+  - id: act_m10_activity_raw
+    device: actigraph
+    level: day
+    source: actigraph_daily
+    column: M10_actual_activity
+    unit: SVM
+    timing: noon_to_noon
+    valid_from: {source: actigraph_daily_compliance, column: valid_day}
+    definition: Unsmoothed hourly mean activity at the M10 midpoint hour.
+  - id: act_l5_hour
+    device: actigraph
+    level: day
+    source: actigraph_daily
+    column: L5_hour
+    unit: clock hour
+    timing: noon_to_noon
+    valid_from: {source: actigraph_daily_compliance, column: valid_day}
+    definition: Midpoint clock hour of the least active 5 h (usually sleep) in the night starting that evening.
+  - id: act_l5_activity
+    device: actigraph
+    level: day
+    source: actigraph_daily
+    column: L5_mean_activity
+    unit: SVM
+    timing: noon_to_noon
+    valid_from: {source: actigraph_daily_compliance, column: valid_day}
+    definition: Smoothed (5 h rolling) mean activity at the L5 midpoint.
+  - id: act_l5_activity_raw
+    device: actigraph
+    level: day
+    source: actigraph_daily
+    column: L5_actual_activity
+    unit: SVM
+    timing: noon_to_noon
+    valid_from: {source: actigraph_daily_compliance, column: valid_day}
+    definition: Unsmoothed hourly mean activity at the L5 midpoint hour.
+  - id: act_is
+    device: actigraph
+    level: season
+    source: actigraph_nonparametric
+    column: IS
+    unit: 0-1
+    definition: Interdaily stability - how alike the 24 h activity pattern is from day to day.
+  - id: act_iv
+    device: actigraph
+    level: season
+    source: actigraph_nonparametric
+    column: IV
+    unit: 0-2
+    definition: Intradaily variability - fragmentation of the rest-activity rhythm.
+  - id: act_sri
+    device: actigraph
+    level: season
+    source: actigraph_sri
+    column: SRI
+    unit: -100-100
+    definition: Sleep Regularity Index (Cole-Kripke sleep/wake, same state 24 h apart).
+  - id: act_sri_days
+    device: actigraph
+    level: season
+    source: actigraph_sri
+    column: n_days
+    unit: days
+    definition: Days contributing to the SRI.
+  - id: act_pct_sleep
+    device: actigraph
+    level: season
+    source: actigraph_sri
+    column: pct_epochs_sleep
+    unit: '%'
+    definition: Percentage of epochs scored as sleep for the SRI.
+
+  # ---------------------------------------------------------------- MiEYE
+  - id: light_mel_mean
+    device: mieye
+    level: day
+    source: mieye_metrics
+    column: melanopic_mean
+    unit: melanopic EDI lx
+    timing: day
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Mean melanopic EDI over the day.
+  - id: light_mel_median
+    device: mieye
+    level: day
+    source: mieye_metrics
+    column: melanopic_median
+    unit: melanopic EDI lx
+    timing: day
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Median melanopic EDI over the day.
+  - id: light_mel_max
+    device: mieye
+    level: day
+    source: mieye_metrics
+    column: melanopic_max
+    unit: melanopic EDI lx
+    timing: day
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Maximum melanopic EDI that day.
+  - id: light_day_mean
+    device: mieye
+    level: day
+    source: mieye_metrics
+    column: day_mean
+    unit: melanopic EDI lx
+    timing: day
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Mean melanopic EDI inside the daytime window (threshold in force).
+  - id: light_night_mean
+    device: mieye
+    level: day
+    source: mieye_metrics
+    column: night_mean
+    unit: melanopic EDI lx
+    timing: day
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Mean melanopic EDI inside the night window of that calendar date.
+  - id: light_tat_min
+    device: mieye
+    level: day
+    source: mieye_metrics
+    column: tat_min
+    unit: min
+    timing: day
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Time above threshold - minutes at or above the TAT level (default 250 lx) in the daytime window.
+  - id: light_tbt_min
+    device: mieye
+    level: day
+    source: mieye_metrics
+    column: tbt_min
+    unit: min
+    timing: day
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Time below threshold - minutes under the TBT level in the night window.
+  - id: light_log_mean
+    device: mieye
+    level: day
+    source: mieye_metrics
+    column: log_mean
+    unit: log10 lx
+    timing: day
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Mean of log10 melanopic EDI (geometric-mean scale).
+  - id: light_hours
+    device: mieye
+    level: day
+    source: mieye_daily_compliance
+    column: light_hours
+    unit: h
+    timing: day
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Hours at or above the light floor (compliance rule).
+  - id: light_pct_compliance
+    device: mieye
+    level: day
+    source: mieye_daily_compliance
+    column: pct_compliance
+    unit: '%'
+    timing: day
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Light hours as a percentage of the expected light hours.
+  - id: light_m5_onset
+    device: mieye
+    level: day
+    source: mieye_windows
+    column: M5_onset
+    unit: clock hour
+    timing: day
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Onset hour of the brightest 5 h.
+  - id: light_m5_level
+    device: mieye
+    level: day
+    source: mieye_windows
+    column: M5_mean
+    unit: melanopic EDI lx
+    timing: day
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Mean melanopic EDI in the brightest 5 h.
+  - id: light_m7_onset
+    device: mieye
+    level: day
+    source: mieye_windows
+    column: M7_onset
+    unit: clock hour
+    timing: day
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Onset hour of the brightest 7 h.
+  - id: light_m7_level
+    device: mieye
+    level: day
+    source: mieye_windows
+    column: M7_mean
+    unit: melanopic EDI lx
+    timing: day
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Mean melanopic EDI in the brightest 7 h.
+  - id: light_l2_onset
+    device: mieye
+    level: day
+    source: mieye_windows
+    column: L2_onset
+    unit: clock hour
+    timing: onset_hour
+    onset: L2_onset
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Onset hour of the darkest 2 h.
+  - id: light_l2_level
+    device: mieye
+    level: day
+    source: mieye_windows
+    column: L2_mean
+    unit: melanopic EDI lx
+    timing: onset_hour
+    onset: L2_onset
+    valid_from: {source: mieye_daily_compliance, column: valid_day}
+    definition: Mean melanopic EDI in the darkest 2 h.
+
+  # ---------------------------------------------------------------- Expiwell
+  - id: diary_sol
+    device: expiwell
+    level: day
+    source: expiwell_sleep
+    column: SOL_min
+    unit: min
+    timing: diary_morning
+    definition: Sleep onset latency reported in the morning sleep diary.
+  - id: diary_awakenings
+    device: expiwell
+    level: day
+    source: expiwell_sleep
+    column: n_awakenings
+    unit: count
+    timing: diary_morning
+    definition: Number of night awakenings reported.
+  - id: diary_waso
+    device: expiwell
+    level: day
+    source: expiwell_sleep
+    column: WASO_min
+    unit: min
+    timing: diary_morning
+    definition: Wake after sleep onset reported.
+  - id: diary_tib
+    device: expiwell
+    level: day
+    source: expiwell_sleep
+    column: TIB_min
+    unit: min
+    timing: diary_morning
+    definition: Time in bed, into bed to out of bed.
+  - id: diary_tst
+    device: expiwell
+    level: day
+    source: expiwell_sleep
+    column: TST_min
+    unit: min
+    timing: diary_morning
+    definition: Total sleep time (lights out to final wake, minus SOL and WASO).
+  - id: diary_se
+    device: expiwell
+    level: day
+    source: expiwell_sleep
+    column: SE_pct
+    unit: '%'
+    timing: diary_morning
+    definition: Sleep efficiency, TST as a percentage of TIB.
+  - id: diary_quality
+    device: expiwell
+    level: day
+    source: expiwell_sleep
+    column: quality
+    unit: rating
+    timing: diary_morning
+    definition: Self-rated sleep quality.
+  - id: diary_restedness
+    device: expiwell
+    level: day
+    source: expiwell_sleep
+    column: restedness
+    unit: rating
+    timing: diary_morning
+    definition: Self-rated restedness on waking.
+  - id: affect_positive
+    device: expiwell
+    level: day
+    source: expiwell_affect
+    column: positive_affect
+    unit: 1-7
+    timing: day
+    agg: mean
+    definition: Mean of the pleasant affect items, averaged over that date's responses.
+  - id: affect_negative
+    device: expiwell
+    level: day
+    source: expiwell_affect
+    column: negative_affect
+    unit: 1-7
+    timing: day
+    agg: mean
+    definition: Mean of the unpleasant affect items, averaged over that date's responses.
+  - id: esm_response_rate
+    device: expiwell
+    level: season
+    source: expiwell_metrics
+    column: response_rate_pct
+    unit: '%'
+    definition: Completed / expected prompts, per survey (variable id gets the survey name appended).

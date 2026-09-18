@@ -25,8 +25,9 @@
       <span>CHiP-D · Compliance Dashboard</span>
     </div>
     <nav class="tabs">
-      <button class="tab active" data-tab="run">1 · Run Checks</button>
-      <button class="tab" data-tab="view">2 · Visualise</button>
+      <button class="tab active" data-tab="run">Compliance</button>
+      <button class="tab" data-tab="view">Visualise</button>
+      <button class="tab" data-tab="t2">T2</button>
     </nav>
     <div class="paths" id="paths"></div>
     <button class="closebtn" id="settings-btn" title="Set source / output folders">⚙</button>
@@ -36,17 +37,21 @@
   <div class="modal hidden" id="settings-modal">
     <div class="modal-box">
       <h3>Folders</h3>
-      <p class="modal-sub">Set the input / output roots for this machine. Saved for next session.</p>
+      <p class="modal-sub">Set the folders for <b>your</b> account on this computer. They're saved to your
+        own profile, so other people using the same installation keep their own folders.</p>
       <label for="set-source">Source root · WT OneDrive staging</label>
       <input id="set-source" type="text" spellcheck="false" />
       <label for="set-output">Output root · Dashboard Test Data</label>
       <input id="set-output" type="text" spellcheck="false" />
+      <label for="set-t2">T2 root · approved curated datasets</label>
+      <input id="set-t2" type="text" spellcheck="false" />
       <label for="set-step1">Step 1 tool repo · actigraphy-epoching</label>
       <input id="set-step1" type="text" spellcheck="false" />
       <label for="set-step2">Step 2 tool repo · actigraphy-sleep-metrics</label>
       <input id="set-step2" type="text" spellcheck="false" />
       <p class="modal-sub">Tool repos are cloned from GitHub by <code>python setup_tools.py</code>; override the folders here if you keep them elsewhere.</p>
       <div class="modal-note" id="set-note"></div>
+      <div class="modal-note settings-file" id="set-file"></div>
       <div class="modal-actions">
         <button class="btn ghost" id="set-cancel">Cancel</button>
         <button class="btn" id="set-save">Save</button>
@@ -64,6 +69,14 @@
           <button class="btn ghost" id="clear-run">Clear selection</button>
         </div>
       </div>
+      <div class="runmode" role="radiogroup" aria-label="What RUN does">
+        <span class="runmode-lbl">Run mode</span>
+        <label class="seg" title="Process new samples and anything unfinished. Folders already complete are skipped."><input type="radio" name="runmode" value="new" checked /><span>New &amp; unfinished</span></label>
+        <label class="seg" title="Dry run: list what would be processed or skipped, plus the naming check. Nothing is downloaded or written."><input type="radio" name="runmode" value="preview" /><span>Preview (dry run)</span></label>
+        <label class="seg warn" title="Redo everything for the selected folders, including items already complete."><input type="radio" name="runmode" value="force" /><span>Force reprocess</span></label>
+        <label class="initials" title="Your initials (2-4 letters). Required for runs that write data; recorded on the batch. Remembered for your account."><span>Initials</span><input id="initials" type="text" maxlength="4" autocomplete="off" spellcheck="false" placeholder="YK" /></label>
+        <label class="chk debug" title="Show every line the analysis tools print in the log"><input type="checkbox" id="verbose" checked /> debug output</label>
+      </div>
       <div class="grid" id="grid-run"></div>
       <div class="legend">
         <span><i class="sw pending"></i> not processed</span>
@@ -74,18 +87,21 @@
         <span><i class="sw badge warning">!</i> naming warning</span>
       </div>
       <div class="logbox">
-        <div class="logbox-head">
-          <span>MESSAGE / LOG</span>
-          <label class="chk" title="Show every line the analysis tools print"><input type="checkbox" id="verbose" checked /> show tool output</label>
-        </div>
+        <div class="logbox-head">MESSAGE / LOG</div>
         <div class="log" id="log-run"></div>
+      </div>
+      <div class="batchbox">
+        <div class="logbox-head batch-head">
+          <span>BATCHES · staging → master</span>
+          <label class="chk" title="Include batches that were removed from the list"><input type="checkbox" id="show-archived" /> show archived</label>
+        </div>
+        <div class="batchlist" id="batchlist"><div class="muted">No batches yet.</div></div>
       </div>
     </section>
 
     <div class="middle">
-      <button class="btn run" id="run-btn" title="Process the selected folders (already-complete items are skipped)">RUN<br />CHECKS</button>
-      <button class="btn check" id="check-btn" title="Preview only: naming check plus what a run would process or skip. Nothing is downloaded or written.">CHECK</button>
-      <button class="btn ghost reprocess" id="reprocess-btn" title="Redo everything for the selected folders, including items already complete">Reprocess…</button>
+      <button class="btn run" id="run-btn">RUN<br />CHECKS</button>
+      <div class="run-plan" id="run-plan">Select folders to see what RUN will do.</div>
       <div class="sel-count" id="sel-count-run">0 selected</div>
     </div>
 
@@ -134,6 +150,7 @@
     <div class="middle">
       <button class="btn run" id="agg-btn">AGGREGATE</button>
       <div class="sel-count" id="sel-count-view">0 selected</div>
+      <button class="btn run t2send" id="t2-send-btn" title="Check cross-device availability and send the selected folders to T2">SEND TO<br />T2 →</button>
     </div>
 
     <section class="right">
@@ -151,6 +168,99 @@
       </div>
     </section>
   </main>
+
+  <!-- ============================ T2 ============================ -->
+  <main class="panel t2 hidden" id="panel-t2">
+    <section class="left t2-side">
+      <div class="panel-head">
+        <h2>Selections</h2>
+        <label class="chk" title="Include selections removed from the list"><input type="checkbox" id="t2-show-archived" /> archived</label>
+      </div>
+      <div class="t2-sellist" id="t2-sellist"><div class="muted">Nothing sent yet. Select folders in <b>Visualise</b> and press <b>SEND TO T2</b>.</div></div>
+      <p class="t2-note">T2 is a <b>preview</b>. It reads the processed outputs and writes nothing; only Export (coming later) produces a dataset.</p>
+    </section>
+
+    <section class="right t2-main" id="t2-main">
+      <div class="panel-head">
+        <h2 id="t2-title">T2 preview</h2>
+        <div class="head-right">
+          <span class="pill" id="t2-privacy"></span>
+          <button class="btn" id="t2-recompute" disabled title="Not built yet: re-run the device tools with different built-in thresholds (light floor, non-wear rule, epoch length). That reprocesses from the raw data, so it will live here as its own step.">Recompute…</button>
+          <button class="btn primary" id="t2-export" title="See exactly which files would be written, then write them">Export…</button>
+        </div>
+      </div>
+      <div id="t2-body"><div class="muted">Pick a selection on the left.</div></div>
+    </section>
+  </main>
+
+  <!-- Visualise -> T2: availability check + user checks + initials -->
+  <div class="modal hidden" id="t2-modal">
+    <div class="modal-box wide">
+      <h3>Send to T2</h3>
+      <p class="modal-sub" id="t2m-sub"></p>
+
+      <div class="t2m-row">
+        <span class="t2m-lbl">Seasons</span>
+        <div class="t2m-chips" id="t2m-seasons"><span class="muted">loading…</span></div>
+      </div>
+      <div class="t2m-row">
+        <span class="t2m-lbl">Devices</span>
+        <div class="t2m-chips" id="t2m-devices"></div>
+      </div>
+      <details class="t2m-vars">
+        <summary>Variables <span id="t2m-varcount" class="muted"></span></summary>
+        <div id="t2m-varlist"></div>
+      </details>
+      <div class="t2m-row">
+        <span class="t2m-lbl">Name</span>
+        <input id="t2m-name" class="t2m-input" type="text" maxlength="80" placeholder="optional, e.g. winter light vs sleep" />
+      </div>
+
+      <div class="t2m-check">
+        <button class="btn" id="t2m-check-btn">Check availability</button>
+        <span class="muted small" id="t2m-check-note">Reads the outputs to see which devices and days line up. Nothing is written.</span>
+      </div>
+      <div id="t2m-result"></div>
+
+      <!-- always visible: what still has to happen before SEND does anything -->
+      <div class="t2m-foot">
+        <div class="t2m-confirm" id="t2m-confirm"></div>
+        <div class="t2m-footrow">
+          <label class="t2m-initrow"><span class="t2m-lbl">Initials</span>
+            <input id="t2m-initials" class="t2m-input initials-in" type="text" maxlength="4" autocomplete="off" spellcheck="false" placeholder="YK" />
+          </label>
+          <div class="t2m-todo" id="t2m-todo"></div>
+          <div class="modal-actions">
+            <button class="btn ghost" id="t2m-cancel">Cancel</button>
+            <button class="btn primary" id="t2m-send" disabled>Send to T2</button>
+          </div>
+        </div>
+        <div class="modal-note" id="t2m-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- T2 export: shows the files before any of them are written -->
+  <div class="modal hidden" id="t2x-modal">
+    <div class="modal-box wide">
+      <h3>Export this dataset</h3>
+      <p class="modal-sub">T2 has only read the outputs so far. This is the step that writes files.</p>
+      <div id="t2x-body"></div>
+      <div class="t2m-foot">
+        <div class="t2m-footrow">
+          <label class="t2m-initrow"><span class="t2m-lbl">Approved by</span>
+            <input id="t2x-initials" class="t2m-input initials-in" type="text" maxlength="4" autocomplete="off" spellcheck="false" placeholder="YK" />
+          </label>
+          <div class="t2m-todo" id="t2x-todo"></div>
+          <div class="modal-actions">
+            <button class="btn ghost" id="t2x-cancel">Close</button>
+            <button class="btn primary" id="t2x-go" disabled>Export</button>
+          </div>
+        </div>
+        <div class="modal-note" id="t2x-note"></div>
+      </div>
+    </div>
+  </div>
 
   <!-- Startup: component / update check, shown before the dashboard -->
   <div class="startup" id="startup">
