@@ -1,0 +1,927 @@
+{
+	"nodes": [
+		{
+			"id": "6e0a0a7855706655",
+			"type": "group",
+			"x": -3760,
+			"y": 1580,
+			"width": 1120,
+			"height": 930,
+			"label": "14 day data (pre-batched per participant)"
+		},
+		{
+			"id": "c89e8823d7b89966",
+			"type": "group",
+			"x": -2340,
+			"y": 1580,
+			"width": 427,
+			"height": 462,
+			"label": "14 day data (batched by upload date)"
+		},
+		{
+			"id": "053f79e45969eae6",
+			"type": "group",
+			"x": -3490,
+			"y": 1581,
+			"width": 661,
+			"height": 230,
+			"label": "Actigraph"
+		},
+		{
+			"id": "b36cc0bf71c2948a",
+			"type": "group",
+			"x": -3470,
+			"y": 2190,
+			"width": 540,
+			"height": 220,
+			"label": "Expiwell"
+		},
+		{
+			"id": "1d2b22c820060894",
+			"type": "group",
+			"x": -2620,
+			"y": 1670,
+			"width": 240,
+			"height": 210,
+			"label": "Compliance Flags"
+		},
+		{
+			"id": "bf7eb67b9f9346ca",
+			"type": "group",
+			"x": -3310,
+			"y": 1621,
+			"width": 440,
+			"height": 100,
+			"color": "4",
+			"label": "step 2"
+		},
+		{
+			"id": "2a4eb422af840e5c",
+			"type": "group",
+			"x": -3470,
+			"y": 1621,
+			"width": 345,
+			"height": 100,
+			"color": "4",
+			"label": "step 1"
+		},
+		{
+			"id": "f3154c72fc3a556a",
+			"type": "group",
+			"x": -3405,
+			"y": 1905,
+			"width": 340,
+			"height": 100,
+			"label": "Luminosity"
+		},
+		{
+			"id": "4d346843c1fe9d67",
+			"type": "group",
+			"x": -3318,
+			"y": 2045,
+			"width": 118,
+			"height": 80,
+			"label": "Saliva"
+		},
+		{
+			"id": "3d3835cb5572e497",
+			"type": "text",
+			"text": "Binary File",
+			"x": -3450,
+			"y": 1641,
+			"width": 125,
+			"height": 60,
+			"color": "4"
+		},
+		{
+			"id": "a21c6e43633d4553",
+			"type": "text",
+			"text": "MiEye CSV",
+			"x": -3385,
+			"y": 1925,
+			"width": 135,
+			"height": 60,
+			"color": "4"
+		},
+		{
+			"id": "56a549d92cf94df5",
+			"type": "text",
+			"text": "???",
+			"x": -3296,
+			"y": 2067,
+			"width": 78,
+			"height": 50
+		},
+		{
+			"id": "8d01d541164161a5",
+			"type": "text",
+			"text": "Heatmaps and Metrics",
+			"x": -3230,
+			"y": 1925,
+			"width": 140,
+			"height": 60,
+			"color": "4"
+		},
+		{
+			"id": "8b20ad1bb9d4b32e",
+			"type": "text",
+			"text": "eClocker processing",
+			"x": -3273,
+			"y": 2210,
+			"width": 169,
+			"height": 55,
+			"color": "4"
+		},
+		{
+			"id": "ad5564349bd8d41b",
+			"type": "text",
+			"text": "Reporting",
+			"x": -3080,
+			"y": 2210,
+			"width": 130,
+			"height": 55,
+			"color": "4"
+		},
+		{
+			"id": "d1b5266f1d4d9281",
+			"type": "text",
+			"text": "Survey items",
+			"x": -3450,
+			"y": 2215,
+			"width": 152,
+			"height": 50,
+			"color": "5"
+		},
+		{
+			"id": "1729265a1feb6b58",
+			"type": "text",
+			"text": "\nPSRS Affect is Empty?",
+			"x": -3450,
+			"y": 2290,
+			"width": 155,
+			"height": 80
+		},
+		{
+			"id": "1fe44aaf9d9676e5",
+			"type": "text",
+			"text": "Epoched CSV",
+			"x": -3290,
+			"y": 1641,
+			"width": 145,
+			"height": 60,
+			"color": "4"
+		},
+		{
+			"id": "9c4d3bfb0bc727a2",
+			"type": "text",
+			"text": "Heatmaps and Metrics",
+			"x": -3110,
+			"y": 1641,
+			"width": 223,
+			"height": 60,
+			"color": "4"
+		},
+		{
+			"id": "83b25345b51ef08f",
+			"type": "text",
+			"text": "Calibration",
+			"x": -3210,
+			"y": 1741,
+			"width": 130,
+			"height": 60,
+			"color": "5"
+		},
+		{
+			"id": "579057409eca2dd7",
+			"type": "text",
+			"text": "Cognitron Data",
+			"x": -2280,
+			"y": 1600,
+			"width": 161,
+			"height": 60
+		},
+		{
+			"id": "65b9acaa40de4d97",
+			"type": "text",
+			"text": "Qualtrics Data ",
+			"x": -2100,
+			"y": 1600,
+			"width": 167,
+			"height": 60
+		},
+		{
+			"id": "ad9133f1deadae26",
+			"type": "text",
+			"text": "collate (per participant data)",
+			"x": -2220,
+			"y": 1820,
+			"width": 182,
+			"height": 60
+		},
+		{
+			"id": "6484c648d2bbd324",
+			"type": "text",
+			"text": "reporting",
+			"x": -2261,
+			"y": 1962,
+			"width": 132,
+			"height": 60
+		},
+		{
+			"id": "91ac191fd5d8e663",
+			"type": "text",
+			"text": "Seasonal in Expiwell (011)",
+			"x": -2620,
+			"y": 1690,
+			"width": 240,
+			"height": 60,
+			"color": "1"
+		},
+		{
+			"id": "08f41ca10783117c",
+			"type": "text",
+			"text": "Seasonal Participant\nPer university - MRI",
+			"x": -2620,
+			"y": 1770,
+			"width": 240,
+			"height": 90,
+			"color": "3"
+		},
+		{
+			"id": "ecf0ac08d4732064",
+			"type": "text",
+			"text": "# Tier 2",
+			"x": -2320,
+			"y": 2230,
+			"width": 120,
+			"height": 60,
+			"color": "5"
+		},
+		{
+			"id": "ad6ba3e58cc58a57",
+			"type": "text",
+			"text": "#### Run Checks\nCompliance >\nmaster folder\n",
+			"x": -2574,
+			"y": 1932,
+			"width": 148,
+			"height": 120,
+			"color": "2"
+		},
+		{
+			"id": "ea1c3edf039d380d",
+			"type": "text",
+			"text": "#### Visualize",
+			"x": -2581,
+			"y": 2340,
+			"width": 132,
+			"height": 60,
+			"color": "5"
+		},
+		{
+			"id": "grp-lanes",
+			"type": "group",
+			"label": "Tier 1 staging → master   ·   one lane per device, per participant × season",
+			"x": -20,
+			"y": -20,
+			"width": 1060,
+			"height": 1120
+		},
+		{
+			"id": "lane-act",
+			"type": "group",
+			"label": "Actigraph  ·  wrist accelerometer (GENEActiv, 100 Hz)",
+			"x": 0,
+			"y": 20,
+			"width": 1010,
+			"height": 300
+		},
+		{
+			"id": "g-s1",
+			"type": "group",
+			"label": "step 1 · epoching",
+			"x": 20,
+			"y": 60,
+			"width": 370,
+			"height": 150,
+			"color": "4"
+		},
+		{
+			"id": "a-bin",
+			"type": "text",
+			"text": "**Raw acceleration**\n`.bin` — 3 axes at 100 Hz\n\n*a thousand samples a second, per axis*",
+			"x": 35,
+			"y": 90,
+			"width": 150,
+			"height": 100
+		},
+		{
+			"id": "a-epoch",
+			"type": "text",
+			"text": "**Epoch summary — 60 s**\n$SVM=\\sum_t\\,\\bigl|\\;\\|a_t\\|-1\\;\\bigr|$\n\ngravity removed by subtracting 1 g; also mean + SD per axis\n*→ `_60s.csv`*",
+			"x": 205,
+			"y": 90,
+			"width": 170,
+			"height": 100,
+			"color": "4"
+		},
+		{
+			"id": "g-s2",
+			"type": "group",
+			"label": "step 2 · rest–activity measures",
+			"x": 410,
+			"y": 60,
+			"width": 350,
+			"height": 150,
+			"color": "4"
+		},
+		{
+			"id": "a-metrics",
+			"type": "text",
+			"text": "**What the rhythm looks like**\n**M10 / L5** — mean activity of the most / least active 10 h / 5 h window (noon-to-noon): *when* it falls + *how high*\n**IS** — day-to-day repeatability of the 24 h profile (0–1)\n**IV** — hour-to-hour fragmentation\n**RA** = (M10−L5)/(M10+L5) · **SRI** — % of minutes in the same sleep/wake state 24 h apart\n*actigraphy-sleep-metrics*",
+			"x": 425,
+			"y": 90,
+			"width": 320,
+			"height": 100,
+			"color": "4"
+		},
+		{
+			"id": "a-comp",
+			"type": "text",
+			"text": "**Did they wear it?**\n**non-wear** ≥ 2 of 3 axis SD < 13 mg, ≥ 30 min\n**valid day** = ≥ 10 h wear **and** hourly-mean SVM range ≥ 20 (a real day/night swing)\n**PASS** ≥ 3 valid days",
+			"x": 775,
+			"y": 90,
+			"width": 215,
+			"height": 100,
+			"color": "2"
+		},
+		{
+			"id": "calib",
+			"type": "text",
+			"text": "**Calibration · step 3 — NOT WIRED IN**\na motionless device should read exactly 1 g; these read 10–15 mg out, which adds a pedestal to *every* epoch\n$SVM' = SVM - n|\\,\\|\\bar a\\|-1| + n|\\,\\|(\\bar a-o)s\\|-1|$  then − floor, clipped at 0\nper-position gain $b = M10_{ref}/M10_{pos}$\n*fixes L5 and RA; see the measure table in `pipeline.md`*",
+			"x": 410,
+			"y": 225,
+			"width": 350,
+			"height": 85,
+			"color": "1"
+		},
+		{
+			"id": "lane-mi",
+			"type": "group",
+			"label": "MiEYE  ·  light exposure at the eye",
+			"x": 0,
+			"y": 350,
+			"width": 1010,
+			"height": 210
+		},
+		{
+			"id": "m-src",
+			"type": "text",
+			"text": "**Light log**\nper-epoch spectral channels\n*`*-logged.csv`*",
+			"x": 20,
+			"y": 390,
+			"width": 150,
+			"height": 100
+		},
+		{
+			"id": "m-tool",
+			"type": "text",
+			"text": "**Melanopic EDI**\nthe channel the body clock responds to (α-opic lux)\n*luminosity-metrics*",
+			"x": 205,
+			"y": 390,
+			"width": 170,
+			"height": 100,
+			"color": "4"
+		},
+		{
+			"id": "m-metrics",
+			"type": "text",
+			"text": "**How much light, and when**\n**day / night mean MEDI** — in the 07–19 and 23–06 windows\n**TAT 250** — minutes at or above 250 lx in the day (Brown 2022 target)\n**TBT 10** — minutes below 10 lx at night\n**M5 / M7 / L2** — brightest 5 h / 7 h and darkest 2 h: onset hour + level\n**geometric mean** — mean of log₁₀, because light spans 5 orders of magnitude",
+			"x": 425,
+			"y": 390,
+			"width": 320,
+			"height": 140,
+			"color": "4"
+		},
+		{
+			"id": "m-comp",
+			"type": "text",
+			"text": "**Was it worn, in daylight?**\ncharging ≠ wearing, so the rule is the *shape of the day*:\n**valid day** = day:night MEDI ratio ≥ 2 **and** ≥ 10 h above the light floor\n**PASS** ≥ 3 valid days",
+			"x": 775,
+			"y": 390,
+			"width": 215,
+			"height": 140,
+			"color": "2"
+		},
+		{
+			"id": "lane-xpw",
+			"type": "group",
+			"label": "Expiwell  ·  experience sampling (ESM)",
+			"x": 0,
+			"y": 590,
+			"width": 1010,
+			"height": 210
+		},
+		{
+			"id": "x-src",
+			"type": "text",
+			"text": "**Survey responses**\none CSV per survey;\n**only completed ones are exported**",
+			"x": 20,
+			"y": 630,
+			"width": 150,
+			"height": 100
+		},
+		{
+			"id": "x-tool",
+			"type": "text",
+			"text": "**Prompt schedule**\nthe denominator has to be *configured* — the file cannot tell you what was missed\n*expiwell-metrics*",
+			"x": 205,
+			"y": 630,
+			"width": 170,
+			"height": 100,
+			"color": "4"
+		},
+		{
+			"id": "x-metrics",
+			"type": "text",
+			"text": "**Mood, sleep and adherence**\n**response rate** = completed ÷ expected prompts\n**sleep diary** — TST = (lights-out → final wake) − SOL − WASO · SE = TST ÷ TIB\n**affect** — mean of the pleasant and unpleasant items (1–7), per response\n**day of study ≠ calendar day** — responses are placed on their real timestamp",
+			"x": 425,
+			"y": 630,
+			"width": 320,
+			"height": 140,
+			"color": "4"
+		},
+		{
+			"id": "x-comp",
+			"type": "text",
+			"text": "**Did they answer enough?**\npooled response rate across scored surveys ≥ 70 %\n**PASS** · within 10 pts **REVIEW** · else **FAIL**",
+			"x": 775,
+			"y": 630,
+			"width": 215,
+			"height": 140,
+			"color": "2"
+		},
+		{
+			"id": "lane-todo",
+			"type": "group",
+			"label": "Not implemented",
+			"x": 0,
+			"y": 830,
+			"width": 1010,
+			"height": 130
+		},
+		{
+			"id": "p-src",
+			"type": "text",
+			"text": "**Saliva**\ncortisol / melatonin — ???",
+			"x": 20,
+			"y": 870,
+			"width": 150,
+			"height": 70
+		},
+		{
+			"id": "p-batch",
+			"type": "text",
+			"text": "**Cognitron · Qualtrics** — exported **batched by upload date**, not per participant, so they need a collate step first (Cognitron also needs a `user_id` ↔ E-code crosswalk, which does not exist yet)",
+			"x": 205,
+			"y": 870,
+			"width": 540,
+			"height": 70
+		},
+		{
+			"id": "p-comp",
+			"type": "text",
+			"text": "no verdict yet",
+			"x": 775,
+			"y": 870,
+			"width": 215,
+			"height": 70
+		},
+		{
+			"id": "doc",
+			"type": "text",
+			"text": "**Assessment log** · per participant-season\nwhat was *meant* to happen: visit number, device start dates, confirmed bed/wake times, and Day 1–15 ESM mapped to real dates\n*copied verbatim, not parsed*",
+			"x": 20,
+			"y": 990,
+			"width": 500,
+			"height": 90,
+			"color": "3"
+		},
+		{
+			"id": "out",
+			"type": "text",
+			"text": "# 🗂️ Master\n`…\\CDxxx\\<Season>\\<Device>\\`\n\nper device — day-level metrics, report PDF, **`_compliance.json`** (the verdict every panel reads)\n\nper season — the assessment log\n\nper participant — roll-up `.csv/.xlsx`",
+			"x": 1090,
+			"y": 350,
+			"width": 240,
+			"height": 280,
+			"color": "5"
+		},
+		{
+			"id": "grp-dash",
+			"type": "group",
+			"label": "CD-Compliance-Checks  ·  one dashboard",
+			"x": 1390,
+			"y": -20,
+			"width": 660,
+			"height": 1120,
+			"color": "6"
+		},
+		{
+			"id": "d-run",
+			"type": "text",
+			"text": "## ① Compliance\n**⚑ naming check** before anything runs — a file whose name drifts is silently skipped or mis-attributed\n**RUN** · new / preview / force · **initials required**",
+			"x": 1410,
+			"y": 30,
+			"width": 280,
+			"height": 150,
+			"color": "2"
+		},
+		{
+			"id": "d-vis",
+			"type": "text",
+			"text": "## ② Visualise\nthe verdicts, read back: who passed, how many valid days, mean % compliance, by season and device",
+			"x": 1410,
+			"y": 330,
+			"width": 280,
+			"height": 130,
+			"color": "5"
+		},
+		{
+			"id": "d-t2",
+			"type": "text",
+			"text": "## ③ T2 — reads only\n**Coverage** — the days each device recorded and the window where they overlap\n**Agreement** — two measures in the same unit; clock hours compared circularly: $\\Delta=((x-y+12)\\bmod 24)-12$\n**Relationships** — *within* a person (their own days, centred) vs *between* people (person means), FDR-corrected\n**Compare** — by season of the year, group, or person",
+			"x": 1410,
+			"y": 500,
+			"width": 280,
+			"height": 200,
+			"color": "5"
+		},
+		{
+			"id": "d-exp",
+			"type": "text",
+			"text": "## ④ Export — the only write\nlists the files first, then takes the **approver's initials**",
+			"x": 1410,
+			"y": 740,
+			"width": 280,
+			"height": 120,
+			"color": "4"
+		},
+		{
+			"id": "runs",
+			"type": "text",
+			"text": "## 🧾 runs/\n**batches/** — public, stripped (who · when · counts · thresholds)\n**_private/** — participants + results, local only",
+			"x": 1740,
+			"y": 30,
+			"width": 290,
+			"height": 160,
+			"color": "3"
+		},
+		{
+			"id": "recompute",
+			"type": "text",
+			"text": "**Recompute** *(placeholder)*\nsome thresholds are baked **into** the numbers — light floor, non-wear rule, epoch length. Changing one means re-deriving the measures, not filtering them",
+			"x": 1740,
+			"y": 500,
+			"width": 290,
+			"height": 150,
+			"color": "1"
+		},
+		{
+			"id": "t2root",
+			"type": "text",
+			"text": "## 📦 T2 dataset\n`<t2_root>/T2-<ts>-<initials>-<seasons>/`\ntidy + wide data · dictionary · charts PDF · device reports · **manifest** (thresholds, tool commits, SHA-256 per input)",
+			"x": 1740,
+			"y": 740,
+			"width": 290,
+			"height": 150,
+			"color": "4"
+		}
+	],
+	"edges": [
+		{
+			"id": "18bc5e42c58f38da",
+			"fromNode": "ad6ba3e58cc58a57",
+			"fromSide": "top",
+			"toNode": "1d2b22c820060894",
+			"toSide": "bottom",
+			"toEnd": "none"
+		},
+		{
+			"id": "f07a467b8f2dab4c",
+			"fromNode": "bf7eb67b9f9346ca",
+			"fromSide": "right",
+			"toNode": "ad6ba3e58cc58a57",
+			"toSide": "left",
+			"color": "4"
+		},
+		{
+			"id": "2fa2c6c98b311d85",
+			"fromNode": "1fe44aaf9d9676e5",
+			"fromSide": "right",
+			"toNode": "9c4d3bfb0bc727a2",
+			"toSide": "left",
+			"color": "4"
+		},
+		{
+			"id": "05d60f5dc24f8ff0",
+			"fromNode": "3d3835cb5572e497",
+			"fromSide": "right",
+			"toNode": "1fe44aaf9d9676e5",
+			"toSide": "left",
+			"color": "4"
+		},
+		{
+			"id": "8cf24ade699b9d8c",
+			"fromNode": "3d3835cb5572e497",
+			"fromSide": "bottom",
+			"toNode": "1fe44aaf9d9676e5",
+			"toSide": "bottom",
+			"color": "5"
+		},
+		{
+			"id": "4a45961e2c8f0b4a",
+			"fromNode": "579057409eca2dd7",
+			"fromSide": "bottom",
+			"toNode": "ad9133f1deadae26",
+			"toSide": "top",
+			"color": "5",
+			"label": "parsing ID-wise information"
+		},
+		{
+			"id": "a3c102b829d5f3f7",
+			"fromNode": "6484c648d2bbd324",
+			"fromSide": "left",
+			"toNode": "ad6ba3e58cc58a57",
+			"toSide": "right"
+		},
+		{
+			"id": "3107d6b223dd2507",
+			"fromNode": "ad9133f1deadae26",
+			"fromSide": "bottom",
+			"toNode": "6484c648d2bbd324",
+			"toSide": "top"
+		},
+		{
+			"id": "fbc19b87e36014b2",
+			"fromNode": "65b9acaa40de4d97",
+			"fromSide": "bottom",
+			"toNode": "ad9133f1deadae26",
+			"toSide": "top",
+			"color": "5"
+		},
+		{
+			"id": "7769989284955411",
+			"fromNode": "ad6ba3e58cc58a57",
+			"fromSide": "bottom",
+			"toNode": "ecf0ac08d4732064",
+			"toSide": "left",
+			"color": "3"
+		},
+		{
+			"id": "e098bd719e7b8b31",
+			"fromNode": "ea1c3edf039d380d",
+			"fromSide": "right",
+			"toNode": "ecf0ac08d4732064",
+			"toSide": "bottom",
+			"color": "5"
+		},
+		{
+			"id": "3a280dab3ae0c2e8",
+			"fromNode": "ad6ba3e58cc58a57",
+			"fromSide": "bottom",
+			"toNode": "ea1c3edf039d380d",
+			"toSide": "top",
+			"color": "4"
+		},
+		{
+			"id": "099f5069c0ad8740",
+			"fromNode": "8d01d541164161a5",
+			"fromSide": "right",
+			"toNode": "ad6ba3e58cc58a57",
+			"toSide": "left",
+			"color": "5"
+		},
+		{
+			"id": "c61806107a74457d",
+			"fromNode": "ad5564349bd8d41b",
+			"fromSide": "right",
+			"toNode": "ad6ba3e58cc58a57",
+			"toSide": "left",
+			"color": "5"
+		},
+		{
+			"id": "4362347c4a9b3fb7",
+			"fromNode": "56a549d92cf94df5",
+			"fromSide": "right",
+			"toNode": "ad6ba3e58cc58a57",
+			"toSide": "left"
+		},
+		{
+			"id": "2372545fc9832357",
+			"fromNode": "a21c6e43633d4553",
+			"fromSide": "right",
+			"toNode": "8d01d541164161a5",
+			"toSide": "left",
+			"color": "4"
+		},
+		{
+			"id": "fc0677dd04e97fe2",
+			"fromNode": "8b20ad1bb9d4b32e",
+			"fromSide": "right",
+			"toNode": "ad5564349bd8d41b",
+			"toSide": "left"
+		},
+		{
+			"id": "a044bb9e864f1b54",
+			"fromNode": "d1b5266f1d4d9281",
+			"fromSide": "right",
+			"toNode": "8b20ad1bb9d4b32e",
+			"toSide": "left"
+		},
+		{
+			"id": "e-a1",
+			"fromNode": "a-bin",
+			"fromSide": "right",
+			"toNode": "a-epoch",
+			"toSide": "left"
+		},
+		{
+			"id": "e-a2",
+			"fromNode": "a-epoch",
+			"fromSide": "right",
+			"toNode": "a-metrics",
+			"toSide": "left"
+		},
+		{
+			"id": "e-a3",
+			"fromNode": "a-metrics",
+			"fromSide": "right",
+			"toNode": "a-comp",
+			"toSide": "left"
+		},
+		{
+			"id": "e-cal1",
+			"fromNode": "a-epoch",
+			"fromSide": "bottom",
+			"toNode": "calib",
+			"toSide": "left",
+			"label": "step-1 epochs",
+			"color": "1"
+		},
+		{
+			"id": "e-cal2",
+			"fromNode": "calib",
+			"fromSide": "top",
+			"toNode": "a-metrics",
+			"toSide": "bottom",
+			"label": "re-runs step 2 on the corrected series",
+			"color": "1"
+		},
+		{
+			"id": "e-m1",
+			"fromNode": "m-src",
+			"fromSide": "right",
+			"toNode": "m-tool",
+			"toSide": "left"
+		},
+		{
+			"id": "e-m2",
+			"fromNode": "m-tool",
+			"fromSide": "right",
+			"toNode": "m-metrics",
+			"toSide": "left"
+		},
+		{
+			"id": "e-m3",
+			"fromNode": "m-metrics",
+			"fromSide": "right",
+			"toNode": "m-comp",
+			"toSide": "left"
+		},
+		{
+			"id": "e-x1",
+			"fromNode": "x-src",
+			"fromSide": "right",
+			"toNode": "x-tool",
+			"toSide": "left"
+		},
+		{
+			"id": "e-x2",
+			"fromNode": "x-tool",
+			"fromSide": "right",
+			"toNode": "x-metrics",
+			"toSide": "left"
+		},
+		{
+			"id": "e-x3",
+			"fromNode": "x-metrics",
+			"fromSide": "right",
+			"toNode": "x-comp",
+			"toSide": "left"
+		},
+		{
+			"id": "e-ao",
+			"fromNode": "a-comp",
+			"fromSide": "right",
+			"toNode": "out",
+			"toSide": "left",
+			"color": "5"
+		},
+		{
+			"id": "e-mo",
+			"fromNode": "m-comp",
+			"fromSide": "right",
+			"toNode": "out",
+			"toSide": "left",
+			"label": "one verdict per recording",
+			"color": "5"
+		},
+		{
+			"id": "e-xo",
+			"fromNode": "x-comp",
+			"fromSide": "right",
+			"toNode": "out",
+			"toSide": "left",
+			"color": "5"
+		},
+		{
+			"id": "e-do",
+			"fromNode": "doc",
+			"fromSide": "right",
+			"toNode": "out",
+			"toSide": "bottom",
+			"color": "3"
+		},
+		{
+			"id": "e-run",
+			"fromNode": "d-run",
+			"fromSide": "left",
+			"toNode": "grp-lanes",
+			"toSide": "right",
+			"label": "RUN · participant × season × device",
+			"color": "2"
+		},
+		{
+			"id": "e-out-vis",
+			"fromNode": "out",
+			"fromSide": "right",
+			"toNode": "d-vis",
+			"toSide": "left",
+			"label": "read-only",
+			"color": "5"
+		},
+		{
+			"id": "e-vis-t2",
+			"fromNode": "d-vis",
+			"fromSide": "bottom",
+			"toNode": "d-t2",
+			"toSide": "top",
+			"label": "SEND TO T2 · seasons + devices + measures, with checks",
+			"color": "5"
+		},
+		{
+			"id": "e-t2-exp",
+			"fromNode": "d-t2",
+			"fromSide": "bottom",
+			"toNode": "d-exp",
+			"toSide": "top",
+			"label": "approve",
+			"color": "4"
+		},
+		{
+			"id": "e-exp-root",
+			"fromNode": "d-exp",
+			"fromSide": "right",
+			"toNode": "t2root",
+			"toSide": "left",
+			"color": "4"
+		},
+		{
+			"id": "e-t2-rec",
+			"fromNode": "d-t2",
+			"fromSide": "right",
+			"toNode": "recompute",
+			"toSide": "left",
+			"label": "what a cut-off cannot change",
+			"color": "1"
+		},
+		{
+			"id": "e-run-runs",
+			"fromNode": "d-run",
+			"fromSide": "right",
+			"toNode": "runs",
+			"toSide": "left",
+			"label": "one batch per run",
+			"color": "3"
+		},
+		{
+			"id": "e-t2-runs",
+			"fromNode": "d-t2",
+			"fromSide": "right",
+			"toNode": "runs",
+			"toSide": "bottom",
+			"label": "selection + export recorded",
+			"color": "3"
+		}
+	]
+}

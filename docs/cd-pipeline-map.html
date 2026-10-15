@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>CHiP-D pipeline — map</title>
+<style>
+  @page { size: A1 landscape; margin: 10mm; }
+  body { margin: 0; background: #f6f7f9; font-family: "Segoe UI", system-ui, sans-serif; }
+  .bar { position: sticky; top: 0; z-index: 5; display: flex; gap: 14px; align-items: center;
+          padding: 8px 14px; background: #fff; border-bottom: 1px solid #ccc; font-size: 13px; }
+  .bar b { font-size: 14px; }
+  .bar span { color: #555; }
+  #wrap { padding: 14px; }
+  svg { width: 100%; height: auto; display: block; background: #fff;
+         box-shadow: 0 1px 6px rgba(0,0,0,.15); }
+
+  /* node + group typography — the only thing enlarged; geometry is untouched */
+  .nbody { font-family: "Segoe UI", system-ui, sans-serif; font-size: 15.5px; line-height: 1.34;
+            color: #111; padding: 12px 14px; height: 100%; overflow: hidden; }
+  .nbody .h { font-weight: 700; margin: 0 0 5px; }
+  .nbody .h1 { font-size: 23px; } .nbody .h2 { font-size: 20px; }
+  .nbody .h3 { font-size: 18px; } .nbody .h4 { font-size: 16px; }
+  .nbody p { margin: 0 0 5px; }
+  .nbody ul { margin: 0 0 4px; padding-left: 19px; }
+  .nbody li { margin: 2px 0; }
+  .nbody code { font-family: "Cascadia Code", Consolas, monospace; font-size: 14px;
+                 background: #eef0f4; border-left: 3px solid #99a; padding: 1px 5px;
+                 display: inline-block; margin: 2px 0; }
+  .glabel { font-size: 19px; font-weight: 700; letter-spacing: .3px; }
+  .elabel { font-family: "Segoe UI", system-ui, sans-serif; font-size: 14px; color: #333;
+             text-align: center; background: rgba(255,255,255,.92); border-radius: 5px;
+             padding: 2px 6px; display: inline-block; }
+
+  @media print {
+    body { background: #fff; }
+    .bar { display: none; }
+    #wrap { padding: 0; }
+    svg { box-shadow: none; }
+  }
+</style></head>
+<body>
+  <div class="bar">
+    <b>CHiP-D pipeline — map</b>
+    <span>exact replica of <code>cd-compliance-pipeline.canvas</code> · 43 nodes · 26 links · nothing moved</span>
+    <span style="margin-left:auto">Print: <b>A1 landscape</b> for readable text — on A4 the type falls to about 2 pt</span>
+  </div>
+  <div id="wrap"><svg id="map" viewBox="0 0 7076 4514" xmlns="http://www.w3.org/2000/svg">
+  <defs><marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7"
+    orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#555"/></marker></defs>
+  <rect x="0" y="0" width="7076" height="4514" fill="#fff"/>
+  <path d="M 677 2150 C 737 2150, 1027 404, 1087 404" fill="none" stroke="#7a5bd4" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 677 2150 C 737 2150, 1047 2144, 1107 2144" fill="none" stroke="#7a5bd4" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 677 2150 C 737 2150, 1010 2940, 1070 2940" fill="none" stroke="#7a5bd4" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 1607 404 C 1667 404, 1627 404, 1687 404" fill="none" stroke="#666" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 2207 404 C 2267 404, 2287 814, 2347 814" fill="none" stroke="#666" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 2947 814 C 3007 814, 2967 624, 3027 624" fill="none" stroke="#666" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 3547 624 C 3607 624, 3607 634, 3667 634" fill="none" stroke="#666" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 4187 634 C 4247 634, 4287 2064, 4347 2064" fill="none" stroke="#1f9fa8" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 1627 2144 C 1687 2144, 1608 2146, 1668 2146" fill="none" stroke="#666" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 2188 2146 C 2248 2146, 2347 2204, 2407 2204" fill="none" stroke="#666" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 3007 2204 C 3067 2204, 3042 2154, 3102 2154" fill="none" stroke="#666" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 3622 2154 C 3682 2154, 3607 2154, 3667 2154" fill="none" stroke="#666" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 4187 2154 C 4247 2154, 4287 2064, 4347 2064" fill="none" stroke="#1f9fa8" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 1590 2940 C 1650 2940, 1683 2956, 1743 2956" fill="none" stroke="#666" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 2003 3096 C 2003 3156, 2287 3220, 2347 3220" fill="none" stroke="#666" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 2947 3220 C 3007 3220, 2972 3219, 3032 3219" fill="none" stroke="#666" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 3552 3219 C 3612 3219, 3607 3184, 3667 3184" fill="none" stroke="#666" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 4187 3184 C 4247 3184, 4287 2064, 4347 2064" fill="none" stroke="#1f9fa8" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 4630 2535 C 4630 2475, 4627 2354, 4627 2294" fill="none" stroke="#b8a800" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 4907 2064 C 4967 2064, 5407 714, 5467 714" fill="none" stroke="#1f9fa8" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 5747 1394 C 5747 1454, 5747 1614, 5747 1674" fill="none" stroke="#1f9fa8" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 6027 1914 C 6087 1914, 6211 1908, 6271 1908" fill="none" stroke="#2e9e5b" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 5747 2154 C 5747 2214, 5747 2274, 5747 2334" fill="none" stroke="#d1495b" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 6027 714 C 6087 714, 6547 1014, 6547 1074" fill="none" stroke="#b8a800" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 6551 1756 C 6551 1696, 6547 1454, 6547 1394" fill="none" stroke="#b8a800" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+<path d="M 5747 874 C 5747 934, 5747 1014, 5747 1074" fill="none" stroke="#1f9fa8" stroke-width="3" marker-end="url(#arw)" opacity=".85"/>
+  <rect x="1047" y="40" width="3200" height="1534" rx="14" fill="#ffffff" fill-opacity=".35" stroke="#555" stroke-width="3" stroke-dasharray="14 10"/><foreignObject x="1061" y="-4" width="3172" height="44"><div xmlns="http://www.w3.org/1999/xhtml" class="glabel" style="color:#555">GeneActiv · Actigraphy</div></foreignObject>
+<rect x="5007" y="494" width="2029" height="2240" rx="14" fill="#f1ecfd" fill-opacity=".35" stroke="#7a5bd4" stroke-width="3" stroke-dasharray="14 10"/><foreignObject x="5021" y="450" width="2001" height="44"><div xmlns="http://www.w3.org/1999/xhtml" class="glabel" style="color:#7a5bd4">CD-COMPLIANCE-CHECKS  ·  one dashboard  ·  three tabs</div></foreignObject>
+<rect x="1047" y="1694" width="3200" height="1000" rx="14" fill="#ffffff" fill-opacity=".35" stroke="#555" stroke-width="3" stroke-dasharray="14 10"/><foreignObject x="1061" y="1650" width="3172" height="44"><div xmlns="http://www.w3.org/1999/xhtml" class="glabel" style="color:#555">MiEYE  ·  Luminosity</div></foreignObject>
+<rect x="1047" y="2734" width="3200" height="940" rx="14" fill="#ffffff" fill-opacity=".35" stroke="#555" stroke-width="3" stroke-dasharray="14 10"/><foreignObject x="1061" y="2690" width="3172" height="44"><div xmlns="http://www.w3.org/1999/xhtml" class="glabel" style="color:#555">EXPIWELL  · Experience Sampling </div></foreignObject>
+<rect x="1047" y="4174" width="3200" height="300" rx="14" fill="#ffffff" fill-opacity=".35" stroke="#555" stroke-width="3" stroke-dasharray="14 10"/><foreignObject x="1061" y="4130" width="3172" height="44"><div xmlns="http://www.w3.org/1999/xhtml" class="glabel" style="color:#555">NOT IMPLEMENTED YET</div></foreignObject>
+<rect x="2347" y="114" width="600" height="1400" rx="14" fill="#eaf7ef" fill-opacity=".35" stroke="#2e9e5b" stroke-width="3" stroke-dasharray="14 10"/><foreignObject x="2361" y="70" width="572" height="44"><div xmlns="http://www.w3.org/1999/xhtml" class="glabel" style="color:#2e9e5b">Step 2 · what each score means</div></foreignObject>
+<rect x="2407" y="1754" width="600" height="900" rx="14" fill="#eaf7ef" fill-opacity=".35" stroke="#2e9e5b" stroke-width="3" stroke-dasharray="14 10"/><foreignObject x="2421" y="1710" width="572" height="44"><div xmlns="http://www.w3.org/1999/xhtml" class="glabel" style="color:#2e9e5b">What each light score means</div></foreignObject>
+<rect x="2347" y="2794" width="600" height="851" rx="14" fill="#eaf7ef" fill-opacity=".35" stroke="#2e9e5b" stroke-width="3" stroke-dasharray="14 10"/><foreignObject x="2361" y="2750" width="572" height="44"><div xmlns="http://www.w3.org/1999/xhtml" class="glabel" style="color:#2e9e5b">What each ESM score means</div></foreignObject>
+<rect x="1107" y="2034" width="520" height="220" rx="10" fill="#ffffff" stroke="#555" stroke-width="3"/><foreignObject x="1107" y="2034" width="520" height="220"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">Raw · MiEYE</div>
+<ul>
+<li>light logger worn at eye level</li>
+<li>per-epoch spectral channels (melanopic, rhodopic, photopic, cones) + motion + charger</li>
+<li>an Excel sheet saved with a <code>.csv</code> name — only that sheet is read</li>
+</ul></div></foreignObject>
+<rect x="1687" y="244" width="520" height="320" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="1687" y="244" width="520" height="320"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">Step 1 · Epoching</div>
+<p><b>In:</b> raw <code>.bin</code>   <b>Out:</b> one row per <b>60 s</b> → <code>_60s.csv</code></p>
+<ul>
+<li><b>SVM</b> — how much movement in that minute, with gravity taken out</li>
+</ul>
+<p><code>SVM = Σ over the minute of | length of the 3-axis vector − 1 g |</code></p>
+<p><i>a perfectly still device reads ≈ 0</i></p>
+<ul>
+<li><b>axis means</b> — which way the device was facing</li>
+<li><b>axis SDs</b> — how much it shook (used later to spot non-wear)</li>
+</ul></div></foreignObject>
+<rect x="1087" y="294" width="520" height="220" rx="10" fill="#ffffff" stroke="#555" stroke-width="3"/><foreignObject x="1087" y="294" width="520" height="220"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">Raw · Actigraph</div>
+<ul>
+<li>GENEActiv <code>.bin</code>, worn on the wrist</li>
+<li>3 axes sampled at <b>100 Hz</b> (~8.6 M readings a day)</li>
+<li>~1.1 GB, usually a cloud placeholder → downloaded first</li>
+<li>one recording per participant-season</li>
+</ul></div></foreignObject>
+<rect x="2387" y="128" width="520" height="303" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="2387" y="128" width="520" height="303"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h3">M10 · L5 — when the day peaks and rests</div>
+<ul>
+<li><b>M10</b> = mean activity over the <b>most active 10 hours</b></li>
+<li><b>L5</b> = mean activity over the <b>least active 5 hours</b></li>
+<li>each gives a <b>level</b> (how much) and an <b>onset hour</b> (when it starts)</li>
+<li>measured noon → noon, so a night is never split across two days</li>
+</ul>
+<p><code>M10 = highest 10-hour rolling mean of hourly activity</code></p>
+<p><code>L5  = lowest 5-hour rolling mean of hourly activity</code></p></div></foreignObject>
+<rect x="2387" y="444" width="520" height="270" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="2387" y="444" width="520" height="270"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h3">IS · IV — how regular, how broken</div>
+<ul>
+<li><b>IS</b> (interdaily stability) — do the days look alike? <b>0 = random, 1 = identical days</b></li>
+</ul>
+<p><code>IS = variance of the average 24-hour day ÷ variance of all hours</code></p>
+<ul>
+<li><b>IV</b> (intradaily variability) — how much it jumps hour to hour; <b>higher = more fragmented</b></li>
+</ul>
+<p><code>IV = mean squared change between neighbouring hours ÷ variance of all hours</code></p></div></foreignObject>
+<rect x="2387" y="734" width="520" height="190" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="2387" y="734" width="520" height="190"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h3">RA — strength of the rhythm</div>
+<ul>
+<li>the contrast between the active and the resting part of the day, on a 0–1 scale</li>
+<li><b>higher = a sharper day/night difference</b></li>
+</ul>
+<p><code>RA = (M10 − L5) ÷ (M10 + L5)</code></p></div></foreignObject>
+<rect x="2387" y="1294" width="520" height="210" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="2387" y="1294" width="520" height="210"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h3">Periodogram — is there a ~24 h cycle at all?</div>
+<ul>
+<li>tries every period from <b>14 h to 34 h</b> and reports which fits best</li>
+<li>a healthy rhythm peaks at ≈ 24 h</li>
+</ul>
+<p><code>strength(P) = variance explained by folding the data at period P ÷ total variance</code></p></div></foreignObject>
+<rect x="3027" y="464" width="520" height="320" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="3027" y="464" width="520" height="320"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">Step 2 · what it writes</div>
+<p><b>In:</b> <code>_60s.csv</code>   <b>Out:</b> per recording</p>
+<ul>
+<li><code>_60s_nonparametric.csv</code> — IS, IV, M10, L5 (one row)</li>
+<li><code>_60s_daily.csv</code> — M10 / L5 <b>for each day</b></li>
+<li><code>_60s_sri.csv</code> — SRI + how many days it used</li>
+<li><code>_60s_periodogram.csv</code> — period vs strength</li>
+<li><code>_60s_report.pdf</code> — the plots a reviewer actually looks at</li>
+</ul></div></foreignObject>
+<rect x="3667" y="464" width="520" height="340" rx="10" fill="#fdf2e6" stroke="#d98324" stroke-width="3"/><foreignObject x="3667" y="464" width="520" height="340"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">Compliance · was it worn?</div>
+<p><b>In:</b> the 60-s epochs   <b>Out:</b> one verdict</p>
+<ul>
+<li><b>non-wear</b> — 2 of 3 axis SDs below <b>13 mg</b> for <b>≥ 30 min</b> <i>(a worn wrist always twitches)</i></li>
+<li><b>valid day</b> — ≥ <b>10 h</b> wear <b>and</b> an hourly activity range ≥ 20 <i>(a real day/night swing)</i></li>
+<li><b>verdict</b> — <b>PASS</b> ≥ 3 valid days · <b>REVIEW</b> within 1 · else <b>FAIL</b></li>
+<li>writes <code>_compliance.json</code> · <code>_daily_compliance.csv</code> · <code>.xlsx</code></li>
+</ul></div></foreignObject>
+<rect x="2387" y="943" width="520" height="330" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="2387" y="943" width="520" height="330"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h3">SRI — same time of day, same state?</div>
+<ul>
+<li>every minute is scored <b>sleep or wake</b> (Cole–Kripke 1992, step 2&#x27;s published constants)</li>
+<li>then: at the same clock minute on the next day, was it the same state?</li>
+</ul>
+<p><code>SRI = 2 × (% of day-to-day minute pairs that match) − 100</code></p>
+<ul>
+<li><b>100 = perfectly repeating · 0 = coin toss</b></li>
+<li>the sleep/wake call uses a fixed cut-off, so it is sensitive to any rescaling of activity</li>
+</ul></div></foreignObject>
+<rect x="3667" y="2014" width="520" height="280" rx="10" fill="#fdf2e6" stroke="#d98324" stroke-width="3"/><foreignObject x="3667" y="2014" width="520" height="280"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">Compliance · worn, in daylight?</div>
+<ul>
+<li>the device is <b>charged regularly, so charging ≠ wearing</b></li>
+<li>the test is the <b>shape of the day</b>:</li>
+<li>day:night melanopic ratio <b>≥ 2</b></li>
+<li><b>and</b> ≥ 10 h above the light floor</li>
+<li><b>verdict</b> — PASS ≥ 3 valid days · REVIEW within 1 · else FAIL</li>
+</ul></div></foreignObject>
+<rect x="4347" y="1834" width="560" height="460" rx="10" fill="#e7f6f7" stroke="#1f9fa8" stroke-width="3"/><foreignObject x="4347" y="1834" width="560" height="460"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h1">Master · the churned data</div>
+<p><code>…\CDxxx\&lt;Season&gt;\&lt;Device&gt;\</code></p>
+<p><b>Collated per participant × season × device</b></p>
+<ul>
+<li>every device writes a <code>_compliance.json</code> <b>in the same shape</b> → one verdict table across devices</li>
+<li>the day-level CSVs sit beside it, so values can be re-read <b>without re-running anything</b></li>
+<li>the season folder also holds the assessment log</li>
+<li>per participant: <code>CDxxx_compliance_summary.csv/.xlsx</code></li>
+</ul></div></foreignObject>
+<rect x="1107" y="4244" width="520" height="180" rx="10" fill="#ffffff" stroke="#555" stroke-width="3"/><foreignObject x="1107" y="4244" width="520" height="180"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">Saliva</div>
+<ul>
+<li>cortisol / melatonin assays</li>
+<li>format and timing not decided yet</li>
+</ul></div></foreignObject>
+<rect x="1747" y="4244" width="1160" height="180" rx="10" fill="#ffffff" stroke="#555" stroke-width="3"/><foreignObject x="1747" y="4244" width="1160" height="180"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">Cognitron · Qualtrics</div>
+<ul>
+<li>exported <b>batched by upload date</b>, not per participant → a <b>collate</b> step is needed first</li>
+<li>Cognitron also needs a <code>user_id</code> ↔ E-code crosswalk, which does not exist yet</li>
+</ul></div></foreignObject>
+<rect x="3667" y="4244" width="520" height="180" rx="10" fill="#ffffff" stroke="#555" stroke-width="3"/><foreignObject x="3667" y="4244" width="520" height="180"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">No verdict</div>
+<ul>
+<li>nothing rolls up for these yet</li>
+</ul></div></foreignObject>
+<rect x="1668" y="2016" width="520" height="260" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="1668" y="2016" width="520" height="260"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">Light processing</div>
+<p><b>In:</b> the logged sheet   <b>Out:</b> per-day metrics + report</p>
+<ul>
+<li>works in <b>melanopic EDI</b> — the part of light the body clock responds to</li>
+<li>kept on a <b>log scale</b>: indoors ≈ 100 lx, daylight ≈ 100 000 lx</li>
+</ul></div></foreignObject>
+<rect x="3102" y="2014" width="520" height="280" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="3102" y="2014" width="520" height="280"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">What it writes</div>
+<ul>
+<li><code>_luminosity_metrics.csv</code> — per-day light metrics</li>
+<li><code>_light_windows.csv</code> — M5 / M7 / L2 per day</li>
+<li><code>_hourly_dark_histogram.csv</code></li>
+<li><code>_luminosity_report.pdf</code> — heatmaps, zones, daily dose</li>
+<li><code>_compliance.json</code> · <code>_daily_compliance.csv</code></li>
+</ul></div></foreignObject>
+<rect x="4280" y="2535" width="700" height="200" rx="10" fill="#fbf8e3" stroke="#b8a800" stroke-width="3"/><foreignObject x="4280" y="2535" width="700" height="200"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">Season paperwork</div>
+<ul>
+<li>the <b>assessment log</b> from staging, copied as-is</li>
+<li>says what was <i>meant</i> to happen: visit number, device start dates, agreed bed/wake times</li>
+<li>maps <b>Day 1–15 of ESM to real dates</b></li>
+</ul></div></foreignObject>
+<rect x="5467" y="1074" width="560" height="320" rx="10" fill="#e7f6f7" stroke="#1f9fa8" stroke-width="3"/><foreignObject x="5467" y="1074" width="560" height="320"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">② Visualise (tab)</div>
+<p><b>In:</b> every <code>_compliance.json</code>   <b>Out:</b> nothing — a reader</p>
+<ul>
+<li>grid coloured by verdict, per participant</li>
+<li>aggregate: passed / review / failed and mean % compliance, by device and season</li>
+<li>drill into one recording: its daily table and report PDF</li>
+</ul></div></foreignObject>
+<rect x="5467" y="554" width="560" height="320" rx="10" fill="#fdf2e6" stroke="#d98324" stroke-width="3"/><foreignObject x="5467" y="554" width="560" height="320"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">① Compliance (tab)</div>
+<p><b>In:</b> staging   <b>Out:</b> the master tree</p>
+<ul>
+<li><b>⚑ naming check first</b> — a filename that drifts gets skipped or mis-attributed</li>
+<li><b>RUN</b>: new &amp; unfinished · preview · force</li>
+<li><b>initials required</b> for anything that writes</li>
+<li>live progress per step, cancellable</li>
+</ul></div></foreignObject>
+<rect x="5467" y="1674" width="560" height="480" rx="10" fill="#e7f6f7" stroke="#1f9fa8" stroke-width="3"/><foreignObject x="5467" y="1674" width="560" height="480"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">③ T2 (tab) — reads only</div>
+<p><b>In:</b> the day-level CSVs for the chosen participants, seasons and devices</p>
+<ul>
+<li>devices lined up on <b>real dates</b>; a night is keyed to the <b>evening it starts</b></li>
+<li><b>Coverage</b> — which days exist, and the window where all chosen devices overlap</li>
+<li><b>Agreement</b> — two measures in the same unit, day by day <i>(clock hours wrap: 23:00 vs 01:00 is 2 h apart, not 22)</i></li>
+<li><b>Relationships</b> — within one person&#x27;s own days vs between different people</li>
+<li><b>Compare</b> — by season of the year, by group, or by person</li>
+</ul>
+<p><b>Out:</b> nothing until Export</p></div></foreignObject>
+<rect x="5507" y="2334" width="480" height="214" rx="10" fill="#fdecee" stroke="#d1495b" stroke-width="3"/><foreignObject x="5507" y="2334" width="480" height="214"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">Recompute <i>(not built)</i></div>
+<ul>
+<li>some thresholds live <b>inside</b> the numbers: light floor, non-wear rule, epoch length</li>
+<li>changing one means re-running step 1 / step 2 — it cannot be done by filtering in T2</li>
+</ul></div></foreignObject>
+<rect x="6307" y="1074" width="480" height="320" rx="10" fill="#fbf8e3" stroke="#b8a800" stroke-width="3"/><foreignObject x="6307" y="1074" width="480" height="320"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">runs/ — the record of what was done</div>
+<ul>
+<li><b>batches/</b> — public, stripped: who, when, mode, counts, thresholds, tool versions</li>
+<li><b>_private/</b> — participants and per-item results, stays on the machine</li>
+</ul></div></foreignObject>
+<rect x="2447" y="2104" width="520" height="240" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="2447" y="2104" width="520" height="240"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h3">When the light falls</div>
+<ul>
+<li><b>M5 / M7</b> — the <b>brightest</b> 5 h and 7 h: onset hour + level</li>
+<li><b>L2</b> — the <b>darkest</b> 2 h: onset hour + level</li>
+<li>these are the hours compared against the Actigraph rest window, to see whether light and sleep line up</li>
+</ul></div></foreignObject>
+<rect x="2447" y="2394" width="520" height="220" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="2447" y="2394" width="520" height="220"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h3">Dose over the study</div>
+<ul>
+<li><b>daily dose</b> — total melanopic exposure per day</li>
+<li><b>time in zones</b> — how long spent dark / dim / bright</li>
+<li><b>hourly dark histogram</b> — which hours of the day were dark</li>
+</ul></div></foreignObject>
+<rect x="2447" y="1794" width="520" height="260" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="2447" y="1794" width="520" height="260"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h3">How much light</div>
+<ul>
+<li><b>day mean / night mean</b> — average melanopic EDI inside 07–19 and 23–06</li>
+<li><b>TAT 250</b> — minutes at or above <b>250 lx</b> during the day <i>(the daytime target)</i></li>
+<li><b>TBT 10</b> — minutes below <b>10 lx</b> at night <i>(the darkness target)</i></li>
+<li><b>geometric mean</b> — the average of log₁₀(light), because the scale spans 5 orders of magnitude</li>
+</ul></div></foreignObject>
+<rect x="2387" y="2834" width="520" height="230" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="2387" y="2834" width="520" height="230"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h3">Adherence</div>
+<ul>
+<li><b>response rate</b> — how much of the protocol was actually answered</li>
+</ul>
+<p><code>response rate = completed prompts ÷ expected prompts</code></p>
+<ul>
+<li>also: median delay before answering, and % answered inside the prompt window</li>
+</ul></div></foreignObject>
+<rect x="2387" y="3104" width="520" height="270" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="2387" y="3104" width="520" height="270"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h3">Sleep diary — the reported night</div>
+<ul>
+<li><b>TST</b> total sleep time · <b>SOL</b> time to fall asleep · <b>WASO</b> awake during the night · <b>SE</b> sleep efficiency</li>
+</ul>
+<p><code>TST = (lights out → final wake) − SOL − WASO</code></p>
+<p><code>SE  = TST ÷ time in bed</code></p>
+<ul>
+<li>filled in the morning, so it describes <b>the night before</b></li>
+</ul></div></foreignObject>
+<rect x="2387" y="3414" width="520" height="190" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="2387" y="3414" width="520" height="190"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h3">Affect — mood in the moment</div>
+<ul>
+<li><b>positive / negative affect</b> — the mean of the pleasant and the unpleasant items (1–7)</li>
+<li>several responses a day, each with its own timestamp</li>
+</ul></div></foreignObject>
+<rect x="3667" y="3084" width="520" height="200" rx="10" fill="#fdf2e6" stroke="#d98324" stroke-width="3"/><foreignObject x="3667" y="3084" width="520" height="200"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">Compliance · enough answers?</div>
+<ul>
+<li>pooled response rate across the <b>scored</b> surveys</li>
+<li><b>PASS</b> ≥ 70 % · <b>REVIEW</b> within 10 points · else <b>FAIL</b></li>
+</ul></div></foreignObject>
+<rect x="3032" y="3079" width="520" height="280" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="3032" y="3079" width="520" height="280"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">What it writes</div>
+<ul>
+<li><code>_expiwell_metrics.csv</code> — response rate per survey</li>
+<li><code>_expiwell_sleep_metrics.csv</code> — one row per night</li>
+<li><code>_expiwell_affect.csv</code> — one row per response</li>
+<li><code>_expiwell_item_series.csv</code> / <code>_item_measures.csv</code> — item level</li>
+<li><code>_expiwell_report.pdf</code> · <code>_compliance.json</code></li>
+</ul></div></foreignObject>
+<rect x="1070" y="2830" width="520" height="220" rx="10" fill="#ffffff" stroke="#555" stroke-width="3"/><foreignObject x="1070" y="2830" width="520" height="220"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">Raw · Expiwell</div>
+<ul>
+<li>one CSV per survey: Affect, Sleep-Diary, Cognitron prompt, …</li>
+<li>4 header rows before the data starts</li>
+<li><b>only completed responses are exported</b> — misses are invisible in the file</li>
+</ul></div></foreignObject>
+<rect x="1743" y="2816" width="520" height="280" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="1743" y="2816" width="520" height="280"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">Schedule + scoring</div>
+<p><b>In:</b> survey CSVs   <b>Out:</b> per-response and per-night values</p>
+<ul>
+<li>the <b>expected</b> number of prompts has to be configured — the file cannot say what was missed</li>
+<li>every response keeps its <b>real timestamp</b>: day-of-study is not a calendar count</li>
+</ul></div></foreignObject>
+<rect x="40" y="2040" width="637" height="220" rx="10" fill="#f1ecfd" stroke="#7a5bd4" stroke-width="3"/><foreignObject x="40" y="2040" width="637" height="220"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h1">Raw data · SharePoint / OneDrive</div>
+<p><code>Tier 1\staging\CDxxx\&lt;Season&gt;\&lt;Device&gt;\</code></p>
+<ul>
+<li>uploaded by the research team: <b>one folder per participant, per season</b></li>
+<li><b>read-only</b> — the pipeline never writes back here</li>
+<li>everything to the right turns this into numbers other people can analyse</li>
+</ul></div></foreignObject>
+<rect x="6271" y="1756" width="560" height="305" rx="10" fill="#eaf7ef" stroke="#2e9e5b" stroke-width="3"/><foreignObject x="6271" y="1756" width="560" height="305"><div xmlns="http://www.w3.org/1999/xhtml" class="nbody"><div class="h h2">④ Export — Tier 2 Research Cohorts</div>
+<ul>
+<li>lists every file <b>before</b> writing, then takes the <b>approver&#x27;s initials</b></li>
+</ul>
+<p><b>Out:</b> <code>&lt;t2_root&gt;\T2-&lt;date&gt;-&lt;initials&gt;-&lt;seasons&gt;\</code></p>
+<ul>
+<li>tidy data + one row per participant-day</li>
+<li>dictionary of every measure</li>
+<li>charts PDF + the device report PDFs</li>
+<li><b>manifest</b> — thresholds used, tool versions, SHA-256 of every input file</li>
+</ul></div></foreignObject>
+  <foreignObject x="2127" y="583" width="300" height="52"><div xmlns="http://www.w3.org/1999/xhtml" class="elabel">per-minute activity</div></foreignObject>
+<foreignObject x="4117" y="1323" width="300" height="52"><div xmlns="http://www.w3.org/1999/xhtml" class="elabel">verdict + day tables</div></foreignObject>
+<foreignObject x="2148" y="2149" width="300" height="52"><div xmlns="http://www.w3.org/1999/xhtml" class="elabel">per-epoch light</div></foreignObject>
+<foreignObject x="1995" y="3162" width="300" height="52"><div xmlns="http://www.w3.org/1999/xhtml" class="elabel">per-response values</div></foreignObject>
+<foreignObject x="4478" y="2388" width="300" height="52"><div xmlns="http://www.w3.org/1999/xhtml" class="elabel">copied as-is</div></foreignObject>
+<foreignObject x="5037" y="1363" width="300" height="52"><div xmlns="http://www.w3.org/1999/xhtml" class="elabel">read-only RUN · participant × season × device </div></foreignObject>
+<foreignObject x="5597" y="1508" width="300" height="52"><div xmlns="http://www.w3.org/1999/xhtml" class="elabel">SEND TO T2 · seasons, devices, measures + your checks</div></foreignObject>
+<foreignObject x="5999" y="1885" width="300" height="52"><div xmlns="http://www.w3.org/1999/xhtml" class="elabel">approve</div></foreignObject>
+<foreignObject x="5597" y="2218" width="300" height="52"><div xmlns="http://www.w3.org/1999/xhtml" class="elabel">what a T2 filter cannot change (yet)</div></foreignObject>
+<foreignObject x="6399" y="1549" width="300" height="52"><div xmlns="http://www.w3.org/1999/xhtml" class="elabel">export recorded too</div></foreignObject>
+<foreignObject x="5597" y="948" width="300" height="52"><div xmlns="http://www.w3.org/1999/xhtml" class="elabel">batchwise processing</div></foreignObject>
+</svg></div>
+</body></html>

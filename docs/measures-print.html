@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<title>CHiP-D measures</title>
+<style>
+  @page { size: A4 landscape; margin: 11mm 10mm; }
+  :root { --ink:#15181d; --mute:#5b6472; --line:#c9cfd8; --head:#eef1f6;
+          --accent:#0B2C91; --noteBg:#fff8e6; --noteLine:#d9a400; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#eceef1; color:var(--ink);
+         font:10.5pt/1.45 "Segoe UI", system-ui, sans-serif; }
+  .sheet { max-width:272mm; margin:0 auto; background:#fff; padding:14mm 12mm; }
+  h1 { font-size:19pt; margin:0 0 2mm; color:var(--accent); letter-spacing:-.2px; }
+  h2 { font-size:13.5pt; margin:0 0 3mm; padding-bottom:1.5mm; color:var(--accent);
+       border-bottom:2px solid var(--accent); }
+  h2.sect { margin-top:8mm; }
+  h3 { font-size:11.5pt; margin:6mm 0 2mm; }
+  h4 { font-size:10.5pt; margin:4mm 0 1.5mm; color:var(--mute); }
+  p  { margin:0 0 2.5mm; max-width:230mm; }
+  ul { margin:0 0 3mm; padding-left:6mm; } li { margin:.8mm 0; }
+  code { font-family:"Cascadia Code", Consolas, monospace; font-size:9pt;
+         background:#f2f4f8; padding:.3mm 1mm; border-radius:2px; }
+  table { width:100%; border-collapse:collapse; margin:0 0 4mm; font-size:8.8pt; }
+  th, td { border:.4mm solid var(--line); padding:1.4mm 1.8mm; text-align:left;
+           vertical-align:top; }
+  th { background:var(--head); font-weight:600; font-size:8.6pt; }
+  td code, th code { font-size:8.2pt; }
+  tbody tr:nth-child(even) { background:#fafbfd; }
+  .note { border-left:1mm solid var(--noteLine); background:var(--noteBg);
+          padding:2mm 3mm; margin:0 0 4mm; font-size:9.3pt; }
+  @media print {
+    body { background:#fff; }
+    .sheet { max-width:none; margin:0; padding:0; }
+    h2.sect { break-before:page; }
+    h2.first { break-before:auto; }
+    table, .note { break-inside:avoid; }
+    tr { break-inside:avoid; }
+  }
+</style></head>
+<body><div class="sheet">
+<h1>CHiP-D measures · what each one is, how it is calculated, and what decides compliance</h1>
+<p>
+A tabulated expansion of <code>cd-compliance-pipeline.canvas</code>.
+Every formula and every threshold below was read out of the code, not out of the
+papers — the reference is given so the two can be checked against each other.
+</p>
+<p>
+Thresholds shown are the values live in <code>config.yaml</code> on this machine.
+A printable version is generated alongside this file as <code>measures-print.html</code>.
+</p>
+<p>
+<strong>Notation.</strong> <code>a</code> = the acceleration vector of one raw sample.
+<code>SVM</code> = the per-epoch signal vector magnitude. <code>X[d,h]</code> = the day-by-hour
+activity matrix. <code>X̄</code> = a grand mean. All logarithms are base 10.
+</p>
+<h2 class="sect first">1 · Step 1 — raw recording to epochs</h2>
+<p>
+<code>actigraphy-epoching</code> · <code>.bin</code> → <code>&lt;stem&gt;_60s.csv</code>
+</p>
+<table><thead><tr><th>Measure</th><th>What it is</th><th>Formula</th><th>Level / setting</th><th>Epoch-length behaviour</th></tr></thead><tbody>
+<tr><td><strong>SVM_sum</strong></td><td>Movement in one epoch. The per-sample departure of acceleration magnitude from 1 g, summed over the epoch.</td><td><code>SVM_sum = Σ_samples abs(‖a‖ − 1 g)</code></td><td>60 s epochs, GENEActiv reader, no bandpass filter (<code>--filter no</code>), <code>full-summary</code> mode</td><td><strong>Scales with epoch length.</strong> It is a <em>sum</em> over samples (<code>preprocess/epoch.py:48</code>), so a 30 s epoch carries about half the value of a 60 s epoch.</td></tr>
+<tr><td><strong>Axis SDs</strong></td><td>Per-epoch standard deviation of each axis. Used only for non-wear detection.</td><td><code>SD(Ax), SD(Ay), SD(Az)</code> within the epoch</td><td>Present only in <code>full-summary</code> mode</td><td>Mildly affected — a shorter window gives a slightly smaller SD.</td></tr>
+</tbody></table>
+<div class="note"><strong>The one thing to carry forward:</strong> <code>SVM_sum</code> is a sum, not a rate. Anything downstream that compares it against an absolute number is epoch-length dependent; anything that takes a <em>ratio</em> of its variability is not. The columns on the right of every table below are an application of exactly that rule.</div>
+<h2 class="sect">2 · Compliance — actigraph</h2>
+<p>
+<code>cdcompliance/compliance.py</code>. This is the orchestrator&#x27;s own code, not a tool
+repo. It is what produces the PASS / REVIEW / FAIL verdict.
+</p>
+<table><thead><tr><th>Measure</th><th>What it is</th><th>Formula</th><th>Level</th><th>Epoch-length behaviour</th></tr></thead><tbody>
+<tr><td><strong>Non-wear candidate</strong></td><td>An epoch where the device was essentially motionless.</td><td><code>(SD(Ax) &lt; τ) + (SD(Ay) &lt; τ) + (SD(Az) &lt; τ) ≥ 2</code></td><td><code>τ = nonwear_axis_sd_g = 0.013 g</code> (13 mg, van Hees)</td><td>Absolute threshold on an SD — <strong>drifts</strong> with epoch length.</td></tr>
+<tr><td><strong>Non-wear</strong></td><td>Motionless for long enough that it is removal, not stillness.</td><td>a run of consecutive candidate epochs of length <code>≥ nonwear_min_minutes</code></td><td><code>30 min</code></td><td><strong>Breaks.</strong> The code passes <em>minutes</em> where the function counts <em>epochs</em> (<code>compliance.py:97</code>), so at 30 s the rule silently becomes 15 minutes.</td></tr>
+<tr><td><strong>Wear fallback</strong></td><td>Used only when the axis SD columns are absent.</td><td><code>wear = SVM_sum ≥ 5.0</code></td><td><code>activity_threshold_svm = 5.0</code></td><td><strong>Breaks</strong> — absolute threshold against a quantity that halves.</td></tr>
+<tr><td><strong>Wear hours</strong></td><td>Worn time in a calendar day.</td><td><code>wear_hours = wear_epochs / epochs_per_hour</code></td><td><code>epochs_per_hour = 60</code></td><td><strong>Breaks</strong> — the constant is fixed at 60, so at 30 s every day reads as twice as long.</td></tr>
+<tr><td><strong>Diurnal range</strong></td><td>Rejects a flat trace, which is implausible for a worn device.</td><td><code>max_h mean(SVM in hour h) − min_h mean(SVM in hour h)</code></td><td><code>min_diurnal_range_svm = 20.0</code></td><td><strong>Breaks</strong> — absolute threshold against a quantity that halves.</td></tr>
+<tr><td><strong>Valid day</strong></td><td>A day that counts towards the verdict.</td><td><code>wear_hours ≥ 10 AND diurnal_range ≥ 20</code></td><td><code>min_valid_hours = 10.0</code></td><td>inherits both breaks above</td></tr>
+<tr><td><strong>Daily % compliance</strong></td><td>How much of an expected day was worn.</td><td><code>min(100, wear_hours / expected_wear_hours × 100)</code></td><td><code>expected_wear_hours = 16.0</code></td><td>inherits the wear-hours break</td></tr>
+<tr><td><strong>Verdict</strong></td><td>The participant-season outcome.</td><td><code>PASS</code> if <code>valid_days ≥ 3</code>; <code>REVIEW</code> if <code>valid_days ≥ 3 − 1</code>; else <code>FAIL</code></td><td><code>min_valid_days = 3</code>, <code>review_margin_days = 1</code></td><td>—</td></tr>
+</tbody></table>
+<div class="note"><strong>Why this table matters for Recompute.</strong> Every threshold in it is absolute, and three of the rows are outright wrong at any epoch length other than 60 s. This is the reason a recompute variant <strong>does not run compliance at all</strong>: the 60 s baseline is the only thing that produces a verdict. See <code>recompute-and-panel1-plan.md</code> § A.</div>
+<h2 class="sect">3 · Step 2 — circadian and sleep metrics</h2>
+<p>
+<code>actigraphy-sleep-metrics</code> · <code>&lt;stem&gt;_60s.csv</code> → non-parametric, daily,
+periodogram and SRI CSVs. <strong>Step 2 is not modified by anything in this project.</strong>
+</p>
+<h3>3.1 The aggregation every measure below sits on</h3>
+<table><thead><tr><th>Step</th><th>What happens</th><th>Formula</th></tr></thead><tbody>
+<tr><td><strong>Hourly activity</strong></td><td>Each epoch is floored to its calendar hour and averaged.</td><td><code>X[d,h] = mean(SVM_sum over epochs in hour h of day d)</code></td></tr>
+<tr><td><strong>Day × hour matrix</strong></td><td>One row per calendar day, 24 columns, <code>NaN</code> where there is no recording.</td><td>shape <code>(D, 24)</code></td></tr>
+</tbody></table>
+<p>
+The matrix shape is <strong>the same at any epoch length</strong> — 30 s simply averages 120
+epochs per hour instead of 60. But the <em>level</em> of <code>X[d,h]</code> halves, because
+<code>SVM_sum</code> is a sum. That single fact determines every right-hand column below.
+</p>
+<h3>3.2 Non-parametric rhythm measures</h3>
+<table><thead><tr><th>Measure</th><th>What it is</th><th>Formula</th><th>Range</th><th>Epoch-length behaviour</th></tr></thead><tbody>
+<tr><td><strong>IS</strong> · interdaily stability</td><td>How repeatable the 24 h pattern is from day to day. 0 = no regularity, 1 = identical every day.</td><td><code>IS = N·Σ_h(X_h − X̄)² / (P·Σ_i(X_i − X̄)²)</code>, <code>P = 24</code>, <code>X_h</code> = column means</td><td>0 – 1</td><td><strong>Invariant.</strong> A ratio of variances, so the halving cancels.</td></tr>
+<tr><td><strong>IV</strong> · intradaily variability</td><td>How fragmented the rhythm is within a day. ~0 = smooth, ~2 = noise.</td><td><code>IV = N·Σ_i(X_{i+1} − X_i)² / ((N−1)·Σ_i(X_i − X̄)²)</code>, after LOCF gap-fill</td><td>0 – ~2</td><td><strong>Invariant.</strong> Also a variance ratio.</td></tr>
+<tr><td><strong>M10 hour</strong></td><td>Onset of the most active 10 consecutive hours.</td><td>circular bidirectional rolling mean of width <strong>11</strong> over <code>X_h</code>; take the <code>argmax</code></td><td>hour 0 – 23</td><td><strong>Invariant.</strong> An <code>argmax</code> does not care about scale.</td></tr>
+<tr><td><strong>M10 level</strong></td><td>Mean activity in that 10 h window.</td><td>the rolling-mean value at the <code>argmax</code></td><td>activity units</td><td><strong>Halves.</strong> Not comparable across epoch lengths.</td></tr>
+<tr><td><strong>L5 hour</strong></td><td>Onset of the least active 5 consecutive hours — the habitual rest window.</td><td>circular bidirectional rolling mean of width <strong>6</strong> over <code>X_h</code>; take the <code>argmin</code></td><td>hour 0 – 23</td><td><strong>Invariant.</strong></td></tr>
+<tr><td><strong>L5 level</strong></td><td>Mean activity in that 5 h window.</td><td>the rolling-mean value at the <code>argmin</code></td><td>activity units</td><td><strong>Halves.</strong></td></tr>
+<tr><td><strong>Per-day M10 / L5</strong></td><td>The same two windows, computed one day at a time.</td><td><code>temp_metrics.compute_daily_metrics</code> on a <strong>noon-to-noon</strong> window (<code>start_hour = 12</code>) so the sleep period sits in the middle</td><td>hour + level</td><td>hours invariant, levels halve</td></tr>
+</tbody></table>
+<div class="note"><strong>RA / relative amplitude is not computed.</strong> <code>RA = (M10 − L5)/(M10 + L5)</code> and the <code>L5:M10</code> ratio appear nowhere in step 2 — verified by searching the repo. Both are derivable from the columns above, and both would be <strong>invariant</strong> (each is a ratio, so the halving cancels). If they are wanted as reported measures, that is a small addition to step 2, not a recomputation.</div>
+<h3>3.3 Periodograms — periods 14 to 34 hours</h3>
+<table><thead><tr><th>Measure</th><th>What it is</th><th>Formula</th><th>Epoch-length behaviour</th></tr></thead><tbody>
+<tr><td><strong>Enright A_p</strong></td><td>Root-mean-square amplitude of the folded profile at trial period <code>p</code>. Large = strong rhythm there.</td><td><code>A_p = √( (1/P)·Σ_h (X̄_{h,p} − X̄_p)² )</code></td><td><strong>Value halves</strong> — it is not variance-normalised. <strong>Peak period is invariant</strong> (<code>argmax</code>).</td></tr>
+<tr><td><strong>Chi-square Q_p</strong></td><td>Sokolove–Bushell statistic; approximately χ² with <code>P − 1</code> df under &quot;no rhythm&quot;.</td><td><code>Q_p = K·N_incl·Σ_h(X_h − X̄)² / Σ_i(X_i − X̄)²</code>, <code>K = ⌊N/P⌋</code>, incomplete cycles dropped</td><td><strong>Invariant</strong> — a variance ratio. So is the p-value and the peak period.</td></tr>
+</tbody></table>
+<h3>3.4 SRI — sleep regularity index</h3>
+<p>
+Computed from the <strong>epoch</strong> series, not the hourly matrix, so it is the one
+measure that genuinely depends on epoch resolution.
+</p>
+<table><thead><tr><th>Stage</th><th>What happens</th><th>Formula</th><th>Setting</th></tr></thead><tbody>
+<tr><td><strong>1 · Normalise</strong></td><td><code>SVM_sum</code> is converted to a per-second rate before scoring.</td><td><code>activity_t = SVM_sum_t / epoch_sec</code></td><td><code>normalize_per_second = True</code> (default)</td></tr>
+<tr><td><strong>2 · Score sleep/wake</strong></td><td>Cole–Kripke (1992) automatic scoring.</td><td><code>D_t = scale · Σ_{k=−3..3} w_k · activity_{t+k}</code>, <code>w = [106, 54, 58, 76, 230, 74, 67]</code>; epoch is <strong>sleep</strong> if <code>D_t &lt; 1</code>, else <strong>wake</strong></td><td><code>scale = 0.001</code>, <code>threshold = 1.0</code></td></tr>
+<tr><td><strong>3 · Align by clock time</strong></td><td>Build a <code>days × epochs-per-day</code> matrix.</td><td><code>M = 86400 / epoch_sec</code> columns</td><td><code>epoch_sec</code> is <strong>inferred from the data</strong> (<code>cli.py:200</code>)</td></tr>
+<tr><td><strong>4 · Compare consecutive days</strong></td><td>Count epochs that match 24 h apart.</td><td><code>SRI = 200 · (matching pairs / valid pairs) − 100</code></td><td>pairs with a missing day excluded</td></tr>
+</tbody></table>
+<p>
+<strong>Epoch-length behaviour — the precise answer.</strong> Two of the three things you
+might worry about are already handled:
+</p>
+<ul>
+<li>the <strong>amplitude</strong> is handled: stage 1 divides by <code>epoch_sec</code>, so a 30 s per-second rate is directly comparable to a 60 s one. The halving cancels.</li>
+<li>the <strong>grid</strong> is handled: <code>epoch_sec</code> is inferred, so <code>M</code> becomes 2880 at 30 s and the clock alignment stays correct. There is no silent collision.</li>
+<li>what is <strong>not</strong> handled is the <strong>time span of the kernel</strong>. Cole–Kripke&#x27;s seven weights are defined for 1-minute epochs, so at 60 s the window covers 7 minutes of real time; at 30 s it covers 3.5 minutes. The scoring therefore smooths over half as much real time and flips state more readily, which biases SRI <strong>downward</strong>. <code>sri.py:173</code> raises a warning whenever <code>epoch_sec ≠ 60</code>.</li>
+</ul>
+<p>
+So a 30 s SRI is not wildly wrong — it is <em>differently smoothed</em>, and the
+difference between it and the 60 s value is the kernel, not the participant.
+That is why it must not be exported from a variant without the warning
+attached.
+</p>
+<h2 class="sect">4 · MiEYE luminosity</h2>
+<p>
+<code>luminosity-metrics</code> · one <code>*-logged.csv</code> per season. Channel: <strong>melanopic</strong>
+(mel EDI / MEDI). Reference thresholds follow Brown et al. 2022.
+</p>
+<table><thead><tr><th>Measure</th><th>What it is</th><th>Formula</th><th>Level</th><th>Notes</th></tr></thead><tbody>
+<tr><td><strong>Day mean MEDI</strong></td><td>Mean melanopic lux in the daytime window.</td><td><code>mean(MEDI for hour ∈ [7, 19))</code></td><td><code>day_window = [7, 19]</code></td><td></td></tr>
+<tr><td><strong>Night mean MEDI</strong></td><td>Mean melanopic lux in the night window.</td><td><code>mean(MEDI for hour ∈ [23, 6))</code></td><td><code>night_window = [23, 6]</code></td><td>wraps midnight</td></tr>
+<tr><td><strong>TAT 250</strong></td><td>Minutes per day at or above the daytime adequacy floor.</td><td><code>count(MEDI ≥ 250 in day window) × epoch_minutes</code></td><td><code>tat_threshold_lx = 250.0</code></td><td>Brown: ≥ 250 lx recommended by day</td></tr>
+<tr><td><strong>TBT 10</strong></td><td>Minutes per night below the &quot;dark enough&quot; ceiling.</td><td><code>count(MEDI &lt; 10 in night window) × epoch_minutes</code></td><td><code>tbt_threshold_lx = 10.0</code></td><td>Brown: &lt; 10 lx evening, &lt; 1 lx night</td></tr>
+<tr><td><strong>log mean</strong></td><td>Mean of the log-transformed series, since light is log-distributed.</td><td><code>mean(log₁₀(MEDI + 0.1))</code></td><td><code>eps = 0.1</code></td><td></td></tr>
+<tr><td><strong>Light hours</strong></td><td>Hours in the day spent above the exposure floor.</td><td><code>count(MEDI ≥ 10 lx) / epochs_per_hour</code></td><td><code>light_floor_lx = 10.0</code></td><td></td></tr>
+<tr><td><strong>Day/night ratio</strong></td><td>Rejects a trace with no light rhythm — e.g. a logger left in a drawer.</td><td><code>day_mean / max(night_mean, 1.0)</code></td><td><code>min_day_night_ratio = 2.0</code></td><td>night floored at 1 lx to avoid divide-by-zero</td></tr>
+<tr><td><strong>Valid day</strong></td><td>A day that counts towards the verdict.</td><td><code>light_hours ≥ 10 AND ratio ≥ 2</code></td><td><code>min_light_hours = 10.0</code></td><td></td></tr>
+<tr><td><strong>Daily % compliance</strong></td><td></td><td><code>min(100, light_hours / expected_light_hours × 100)</code></td><td><code>expected_light_hours = 10.0</code></td><td></td></tr>
+<tr><td><strong>Verdict</strong></td><td></td><td><code>PASS</code> if <code>valid_days ≥ 3</code>; <code>REVIEW</code> if <code>≥ 2</code>; else <code>FAIL</code></td><td><code>min_valid_days = 3</code>, <code>review_margin_days = 1</code></td><td></td></tr>
+<tr><td><strong>M5 / M7 / L2</strong></td><td>Brightest 5 h and 7 h, and darkest 2 h, with onset and mean level.</td><td>the light analogue of M10 / L5</td><td>—</td><td><code>ml_windows.py</code></td></tr>
+</tbody></table>
+<div class="note"><strong>Open issue, carried from earlier sessions:</strong> with <code>light_floor_lx = 10.0</code> and <code>min_light_hours = 10.0</code>, nearly every light day reads as invalid. These two thresholds are the ones most in need of calibration against real recordings — the rule is working as written, but the written rule looks stricter than the data supports.</div>
+<h2 class="sect">5 · ExpiWell ESM</h2>
+<p>
+<code>expiwell-metrics</code> · one export CSV per season, 4-row preamble.
+</p>
+<table><thead><tr><th>Measure</th><th>What it is</th><th>Formula</th><th>Level</th><th>Notes</th></tr></thead><tbody>
+<tr><td><strong>Response rate</strong></td><td>Pooled completion across the scored surveys.</td><td><code>completed / expected × 100</code></td><td>—</td><td>The export lists <strong>only completed</strong> responses, so <code>expected</code> is <strong>configured, never inferred</strong></td></tr>
+<tr><td><strong>Expected denominator</strong></td><td>How many prompts were scheduled.</td><td><code>expected_days</code> × the per-survey protocol</td><td><code>expected_days = 15</code>, overridable with <code>schedule_file</code></td><td>survey types: signal / interval / event</td></tr>
+<tr><td><strong>Straight-lining flag</strong></td><td>A response too fast to be genuine.</td><td><code>duration &lt; 5 s</code></td><td><code>min_plausible_duration_sec = 5.0</code></td><td>flagged, not excluded</td></tr>
+<tr><td><strong>Verdict</strong></td><td></td><td><code>PASS</code> if rate <code>≥ 70%</code>; <code>REVIEW</code> if <code>≥ 70 − 10</code>; else <code>FAIL</code></td><td><code>min_response_rate_pct = 70.0</code>, <code>review_margin_pct = 10.0</code></td><td></td></tr>
+<tr><td><strong>Affect measures</strong></td><td>Momentary affect items carried into T2.</td><td>per-item scores, dated</td><td>—</td><td>date recovered from the item series where absent</td></tr>
+</tbody></table>
+<h2 class="sect">6 · T2 — cross-device analysis</h2>
+<p>
+<code>cdcompliance/t2_data.py</code>, <code>t2_stats.py</code>. T2 <strong>reads</strong> what the stages above
+produced; it never recomputes a measure. Everything here is a comparison or a
+filter.
+</p>
+<table><thead><tr><th>Measure</th><th>What it is</th><th>Formula</th><th>Level / guard</th></tr></thead><tbody>
+<tr><td><strong>night_of</strong></td><td>The evening a night began, so a diary filled in on the morning of the 5th is attributed to the 4th.</td><td>date shifted back for post-midnight records</td><td>—</td></tr>
+<tr><td><strong>Common window</strong></td><td>The run of days on which <strong>all</strong> selected devices were recording at once.</td><td>intersection of each device&#x27;s date range</td><td>flagged <code>short-common-window</code> under a week</td></tr>
+<tr><td><strong>Clock-hour difference</strong></td><td>Signed difference between two clock hours, respecting the wrap at midnight.</td><td><code>Δ = ((x − y + 12) mod 24) − 12</code></td><td>result in <code>[−12, +12)</code></td></tr>
+<tr><td><strong>Between-person r</strong></td><td>Correlates each participant&#x27;s <strong>mean</strong> x against their mean y. Answers &quot;do people who are higher on x tend to be higher on y?&quot;</td><td>Pearson over per-participant means</td><td>needs <code>≥ 3</code> participants, else withheld</td></tr>
+<tr><td><strong>Within-person r</strong></td><td>Subtracts each participant&#x27;s own mean, then correlates the deviations. Answers &quot;on a day when x is higher than usual, is y?&quot;</td><td>Pearson over mean-centred deviations, with <code>n_eff</code> for the lost degrees of freedom</td><td>—</td></tr>
+<tr><td><strong>Confidence interval</strong></td><td></td><td>Fisher <em>z</em> transform, back-transformed</td><td>—</td></tr>
+<tr><td><strong>FDR</strong></td><td>Controls false positives across a matrix of correlations.</td><td>Benjamini–Hochberg over the p-values</td><td>—</td></tr>
+<tr><td><strong>Cut-offs</strong></td><td>Exclude days or participant-seasons from a view.</td><td>row filter on the long table</td><td><strong>filters only — never recomputes</strong></td></tr>
+<tr><td><strong><code>valid</code> flag</strong></td><td>The device&#x27;s own valid-day flag, carried through for reference.</td><td>from the compliance stage</td><td><strong>T2 does not filter on it</strong> — every day reaching T2 already passed compliance</td></tr>
+</tbody></table>
+<h2 class="sect">7 · Epoch-length summary</h2>
+<p>
+The single table to consult before interpreting a recompute variant.
+</p>
+<table><thead><tr><th>Measure</th><th>30 s vs 60 s</th><th>Why</th></tr></thead><tbody>
+<tr><td><code>SVM_sum</code> per epoch</td><td><strong>halves</strong></td><td>a sum over half as many samples</td></tr>
+<tr><td>Hourly activity level</td><td><strong>halves</strong></td><td>mean of epoch sums</td></tr>
+<tr><td>IS, IV</td><td><strong>invariant</strong></td><td>variance ratios</td></tr>
+<tr><td>M10 / L5 <strong>hour</strong></td><td><strong>invariant</strong></td><td><code>argmax</code> / <code>argmin</code></td></tr>
+<tr><td>M10 / L5 <strong>level</strong></td><td><strong>halves</strong></td><td>an activity level</td></tr>
+<tr><td>RA, L5:M10 <em>(not computed)</em></td><td>would be <strong>invariant</strong></td><td>ratios</td></tr>
+<tr><td>Chi-square <code>Q_p</code>, p-value, peak period</td><td><strong>invariant</strong></td><td>variance ratio</td></tr>
+<tr><td>Enright <code>A_p</code> <strong>value</strong></td><td><strong>halves</strong></td><td>not variance-normalised</td></tr>
+<tr><td>Enright <strong>peak period</strong></td><td><strong>invariant</strong></td><td><code>argmax</code></td></tr>
+<tr><td>SRI</td><td><strong>biased downward</strong></td><td>amplitude and grid are handled; the Cole–Kripke kernel spans half the real time</td></tr>
+<tr><td>Every compliance threshold</td><td><strong>invalid</strong></td><td>all absolute; three rows outright wrong — so compliance is not run on a variant</td></tr>
+</tbody></table>
+<p>
+<strong>Rule of thumb.</strong> Ratios and positions survive a change of epoch length;
+levels and absolute thresholds do not. Of the measures step 2 reports today,
+the <strong>timing</strong> results (M10/L5 hours, peak periods) and the <strong>regularity</strong>
+results (IS, IV, Q_p) are directly comparable between a 60 s baseline and a
+30 s variant. The <strong>levels</strong> are not, and SRI is comparable only with its
+warning attached.
+</p>
+<h2 class="sect">Sources in code</h2>
+<table><thead><tr><th>Area</th><th>File</th></tr></thead><tbody>
+<tr><td>SVM and epoching</td><td><code>actigraphy-epoching/preprocess/epoch.py</code>, <code>preprocess/io.py</code>, <code>cli.py</code></td></tr>
+<tr><td>Actigraph compliance</td><td><code>cdcompliance/compliance.py</code>, <code>cdcompliance/config.py</code></td></tr>
+<tr><td>Hourly aggregation</td><td><code>actigraphy-sleep-metrics/preprocess.py</code></td></tr>
+<tr><td>IS, IV, M10, L5</td><td><code>actigraphy-sleep-metrics/nonparametric.py</code></td></tr>
+<tr><td>Per-day M10/L5</td><td><code>actigraphy-sleep-metrics/temp_metrics.py</code></td></tr>
+<tr><td>Periodograms</td><td><code>actigraphy-sleep-metrics/periodogram.py</code></td></tr>
+<tr><td>SRI</td><td><code>actigraphy-sleep-metrics/sri.py</code></td></tr>
+<tr><td>Luminosity</td><td><code>luminosity-metrics/metrics.py</code>, <code>compliance.py</code>, <code>ml_windows.py</code></td></tr>
+<tr><td>ExpiWell</td><td><code>expiwell-metrics/</code>, <code>cdcompliance/devices/expiwell.py</code></td></tr>
+<tr><td>T2</td><td><code>cdcompliance/t2_data.py</code>, <code>t2_stats.py</code>, <code>t2_export.py</code></td></tr>
+</tbody></table>
+</div></body></html>
