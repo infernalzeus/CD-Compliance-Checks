@@ -38,8 +38,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
-from cdcompliance import batches, manifest, naming, results, updates  # noqa: E402
-from cdcompliance import pseudo_id, t2_data, t2_selections, user_settings  # noqa: E402
+from cdcompliance import batches, manifest, naming, results, updates, variants  # noqa: E402
+from cdcompliance import pseudo_id, t2_data, t2_selections, tools, user_settings  # noqa: E402
 from cdcompliance.config import load_config  # noqa: E402
 from cdcompliance.devices import all_devices, implemented_devices  # noqa: E402
 from webapp.jobs import JobManager  # noqa: E402
@@ -520,6 +520,139 @@ def api_t2_selection(batch_id: str) -> JSONResponse:
                                        "devices", "variables", "status", "checks")}
     return JSONResponse({"record": head, "summary": info,
                          "same_unit": t2_selections.same_unit_pairs(sel)})
+
+
+def _selection_seasons(participant: str, wanted) -> list[str]:
+    """Season FOLDER names for one participant, filtered by a selection's seasons.
+
+    A selection stores season keys ('aut25') or ordinals (1, 2, 3); the folders
+    on disk are named freely ('Autumn  2025'). `season_numbers` already knows
+    the mapping, so this just applies the same filter `t2_data.load` uses.
+    """
+    numbers = t2_data.season_numbers(_config, participant)
+    wanted = list(wanted or [])
+    if not wanted:
+        return list(numbers)
+    by_key = [w for w in wanted if isinstance(w, str)]
+    by_number = [w for w in wanted if not isinstance(w, str)]
+    return [name for name, info in numbers.items()
+            if info.get("season_key") in by_key or info["n"] in by_number]
+
+
+@app.get("/api/t2/step1-options")
+def api_step1_options() -> JSONResponse:
+    """What a recompute may vary, with the pipeline baseline for each."""
+    return JSONResponse({"options": tools.STEP1_OPTIONS,
+                         "baseline": tools.step1_defaults(),
+                         "devices": list(variants.SUPPORTED_DEVICES)})
+
+
+@app.get("/api/t2/selections/{batch_id}/recordings")
+def api_t2_recordings(batch_id: str) -> JSONResponse:
+    """Recordings in this cohort that a Step 1 recompute could be run on.
+
+    Real participant IDs: this is the local dashboard, and pseudonymisation
+    applies at export only.
+    """
+    try:
+        _record, sel = t2_selections.load_selection(_config, batch_id)
+    except FileNotFoundError:
+        return JSONResponse({"error": "no local detail for this selection"}, status_code=404)
+    except (t2_selections.SelectionError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+    rows: list[dict] = []
+    for pid in sel.participants:
+        for season in _selection_seasons(pid, sel.seasons):
+            rows.extend(variants.recordings(_config, pid, season, "actigraph"))
+    return JSONResponse({
+        "cohort": batch_id,
+        "recordings": rows,
+        "n_recomputable": sum(1 for r in rows if r["raw_present"]),
+        "n_blocked": sum(1 for r in rows if not r["raw_present"]),
+    })
+
+
+@app.post("/api/t2/recompute")
+def api_t2_recompute(payload: dict) -> JSONResponse:
+    """Queue a Step 1 recompute for recordings inside one T2 cohort.
+
+    Step 1 only. Step 2 is not run, no verdict is produced, and the baseline
+    files are not touched. Targets are checked against the cohort first, so a
+    recompute can never reach a recording the cohort does not contain.
+    """
+    batch_id = str((payload or {}).get("cohort") or "").strip()
+    initials = batches.normalise_initials((payload or {}).get("initials"))
+    if initials is None:
+        return JSONResponse({"error": "initials required (2-4 letters) - a recompute writes data"},
+                            status_code=400)
+    try:
+        _record, sel = t2_selections.load_selection(_config, batch_id)
+    except FileNotFoundError:
+        return JSONResponse({"error": "no local detail for this selection"}, status_code=404)
+    except (t2_selections.SelectionError, ValueError) as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+
+    try:
+        options = tools.normalise_step1_options((payload or {}).get("options") or {})
+    except tools.ToolError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    if not variants.changed_from_baseline(options):
+        return JSONResponse({"error": "these are the baseline settings - change at least one"},
+                            status_code=400)
+
+    # A recompute cohort is a SUBSET of its parent: every target must already be
+    # in the cohort. Anything else is a fresh selection from Visualise, not a
+    # recompute.
+    allowed = {(r["participant"], r["season"], r["stem"])
+               for pid in sel.participants
+               for season in _selection_seasons(pid, sel.seasons)
+               for r in variants.recordings(_config, pid, season, "actigraph")}
+    targets, outside, blocked = [], [], []
+    for t in (payload or {}).get("targets") or []:
+        key = (t.get("participant"), t.get("season"), t.get("stem"))
+        if key not in allowed:
+            outside.append("/".join(str(k) for k in key))
+            continue
+        dev_dir = variants.device_dir(_config, key[0], key[1], "actigraph")
+        if not (dev_dir / f"{key[2]}.bin").is_file():
+            blocked.append("/".join(str(k) for k in key))
+            continue
+        targets.append({"participant": key[0], "season": key[1], "stem": key[2],
+                        "device": "actigraph"})
+    if outside:
+        return JSONResponse({"error": "a recompute cannot be larger than the cohort it came "
+                                      "from; not in this cohort: " + ", ".join(outside[:5])},
+                            status_code=400)
+    if not targets:
+        return JSONResponse({"error": "no recomputable recordings selected"
+                                      + (" (raw .bin missing for: " + ", ".join(blocked[:5]) + ")"
+                                         if blocked else "")}, status_code=400)
+
+    user_settings.set_text("initials", initials)
+    _persist_settings()
+    job = _jobs.submit_recompute(targets, options, initials, cohort=batch_id)
+    return JSONResponse({"job_id": job.id, "job": job.info(), "n_targets": len(targets),
+                         "skipped_no_raw": blocked})
+
+
+@app.post("/api/t2/variants/discard")
+def api_t2_variant_discard(payload: dict) -> JSONResponse:
+    """Move one variant to `_variants/_discarded/`. The baseline is never touched."""
+    initials = batches.normalise_initials((payload or {}).get("initials"))
+    if initials is None:
+        return JSONResponse({"error": "initials required (2-4 letters)"}, status_code=400)
+    p = payload or {}
+    try:
+        rec = variants.discard(_config, str(p.get("participant") or ""),
+                               str(p.get("season") or ""), str(p.get("device") or "actigraph"),
+                               str(p.get("variant_id") or ""), initials,
+                               str(p.get("reason") or ""))
+    except variants.VariantError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except OSError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=500)
+    return JSONResponse({"ok": True, "discarded": rec.get("discarded")})
 
 
 @app.post("/api/t2/selections/{batch_id}/archive")

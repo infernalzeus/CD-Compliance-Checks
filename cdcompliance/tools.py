@@ -149,13 +149,78 @@ def _stream(cmd: list[str], cwd: Path, bus: EventBus, name: str) -> None:
     bus.emit("step_done", name=name, seconds=seconds)
 
 
+#: Step 1 settings a recompute may vary, with the baseline the pipeline uses.
+#: Anything not listed here cannot be changed from the dashboard.
+STEP1_OPTIONS = {
+    "epoch": {"flag": "--epoch", "default": "60s", "label": "Epoch length",
+              "choices": ["5s", "10s", "15s", "30s", "60s", "120s", "300s"],
+              "help": "Length of one epoch. The pipeline baseline is 60 s."},
+    "filter": {"flag": "--filter", "default": "no", "label": "Bandpass filter",
+               "choices": ["no", "yes"],
+               "help": "Butterworth bandpass on Ax/Ay/Az before the epoch summary."},
+    "low": {"flag": "--low", "default": "0.5", "label": "Bandpass low (Hz)",
+            "help": "Only used when the bandpass filter is on."},
+    "high": {"flag": "--high", "default": "20.0", "label": "Bandpass high (Hz)",
+             "help": "Only used when the bandpass filter is on."},
+    "summary_mode": {"flag": "--summary-mode", "default": "full-summary",
+                     "label": "Epoch summary", "choices": ["svm", "motion-summary", "full-summary"],
+                     "help": "full-summary carries the per-axis SDs that non-wear detection needs."},
+}
+
+
+def epoch_label(epoch: str) -> str:
+    """The label Step 1 puts in the output filename (its `normalize_epoch_label`)."""
+    return str(epoch).strip().replace(" ", "")
+
+
+def step1_defaults() -> dict[str, str]:
+    return {k: v["default"] for k, v in STEP1_OPTIONS.items()}
+
+
+def normalise_step1_options(options: Optional[dict]) -> dict[str, str]:
+    """Validate a caller's Step 1 settings against STEP1_OPTIONS.
+
+    Unknown keys and values outside a declared `choices` list are rejected
+    rather than passed through, so a bad request can never reach the tool's
+    command line.
+    """
+    out = step1_defaults()
+    for key, value in (options or {}).items():
+        if key not in STEP1_OPTIONS:
+            raise ToolError(f"unknown Step 1 option {key!r}; known: {', '.join(sorted(STEP1_OPTIONS))}")
+        spec = STEP1_OPTIONS[key]
+        text = str(value).strip()
+        if "choices" in spec and text not in spec["choices"]:
+            raise ToolError(f"{key}={text!r} is not one of: {', '.join(spec['choices'])}")
+        if key in ("low", "high"):
+            try:
+                float(text)
+            except ValueError:
+                raise ToolError(f"{key} must be a number, got {text!r}") from None
+        out[key] = text
+    return out
+
+
 def run_step1_process(
-    config: Config, bin_path: Path, output_dir: Path, bus: EventBus
+    config: Config,
+    bin_path: Path,
+    output_dir: Path,
+    bus: EventBus,
+    options: Optional[dict] = None,
+    name: str = "step1:process",
 ) -> Path:
-    """Step 1 full pipeline (.bin -> 60-second epoch CSV) with default settings."""
+    """Step 1 full pipeline (.bin -> epoch CSV).
+
+    With no *options* this is the pipeline baseline: 60-second epochs, no
+    bandpass, full-summary — exactly what it has always run. A recompute passes
+    *options* to vary those settings; the output is then named after the epoch
+    it actually used (`<stem>_30s.csv`), so a variant can never overwrite the
+    baseline.
+    """
     bin_path = Path(bin_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
+    opts = normalise_step1_options(options)
 
     cmd = _python_cmd(config) + [
         "-m",
@@ -165,11 +230,13 @@ def run_step1_process(
         str(bin_path),
         "--output-dir",
         str(output_dir),
-        "--verbose",
     ]
-    _stream(cmd, config.tools.epoching_repo, bus, name="step1:process")
+    for key, spec in STEP1_OPTIONS.items():
+        cmd += [spec["flag"], opts[key]]
+    cmd.append("--verbose")
+    _stream(cmd, config.tools.epoching_repo, bus, name=name)
 
-    expected = output_dir / f"{bin_path.stem}_60s.csv"
+    expected = output_dir / f"{bin_path.stem}_{epoch_label(opts['epoch'])}.csv"
     if not expected.exists():
         raise ToolError(
             f"Step 1 finished but expected output not found: {expected}"

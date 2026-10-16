@@ -43,10 +43,12 @@ SCHEMA_VERSION = 1
 STAGES = {
     "PRE": "staging -> master (preprocess)",
     "T2": "master -> T2",
+    "RECOMP": "master -> variant (recompute, Step 1 only)",
 }
 #: Stages whose batch id carries a season tag.
 SEASONAL_STAGES = {"T2"}
-MODES = {"new": "new & unfinished", "force": "force reprocess", "selection": "sent to T2"}
+MODES = {"new": "new & unfinished", "force": "force reprocess", "selection": "sent to T2",
+         "recompute": "recompute (Step 1 variant)"}
 
 _INITIALS_RE = re.compile(r"^[A-Z]{2,4}$")
 
