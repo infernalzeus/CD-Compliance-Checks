@@ -20,7 +20,7 @@ from pathlib import Path
 from queue import Queue
 from typing import Any, Optional
 
-from cdcompliance import batches, naming, pipeline, tools
+from cdcompliance import batches, naming, pipeline, tools, variants
 from cdcompliance.config import Config, ResolvedSelection
 from cdcompliance.devices import implemented_devices
 from cdcompliance.events import EventBus
@@ -29,13 +29,16 @@ from cdcompliance.events import EventBus
 class Job:
     def __init__(
         self, job_id: str, participants: list[str], force: bool, dry_run: bool = False,
-        initials: str = "",
+        initials: str = "", kind: str = "run", payload: Optional[dict[str, Any]] = None,
     ) -> None:
         self.id = job_id
         self.participants = participants
         self.force = force
         self.dry_run = dry_run
         self.initials = initials
+        #: "run" = staging -> master. "recompute" = Step 1 variant beside a recording.
+        self.kind = kind
+        self.payload = payload or {}
         self.batch_id: Optional[str] = None
         self.recorder = None      # BatchRecorder for real runs
         self.status = "queued"  # queued | running | done | error | cancelled
@@ -52,6 +55,7 @@ class Job:
     def info(self) -> dict[str, Any]:
         return {
             "id": self.id,
+            "kind": self.kind,
             "participants": self.participants,
             "force": self.force,
             "dry_run": self.dry_run,
@@ -85,6 +89,18 @@ class JobManager:
             threading.Thread(target=self._run_job_safe, args=(job,), daemon=True).start()
         else:
             self._queue.put(job)
+        return job
+
+    def submit_recompute(self, targets: list[dict[str, Any]], options: dict[str, str],
+                         initials: str, cohort: Optional[str] = None) -> Job:
+        """Queue a Step 1 recompute. Runs on the same single worker as a normal run,
+        so a recompute never competes with a processing run for the tools."""
+        participants = list(dict.fromkeys(t["participant"] for t in targets))
+        job = Job(uuid.uuid4().hex[:12], participants, force=False, dry_run=False,
+                  initials=initials, kind="recompute",
+                  payload={"targets": targets, "options": options, "cohort": cohort})
+        self.jobs[job.id] = job
+        self._queue.put(job)
         return job
 
     def get(self, job_id: str) -> Optional[Job]:
@@ -166,6 +182,8 @@ class JobManager:
             )
 
     def _execute(self, job: Job) -> None:
+        if job.kind == "recompute":
+            return self._execute_recompute(job)
         job.status = "running"
         bus = EventBus()
         bus.subscribe(lambda event: self._emit(job, event))
@@ -230,6 +248,66 @@ class JobManager:
             job,
             {"type": "job_end", "status": job.status, "dry_run": job.dry_run},
         )
+
+    def _execute_recompute(self, job: Job) -> None:
+        """Step 1 only, into `_variants/`. Step 2 is not run and no verdict is produced."""
+        job.status = "running"
+        bus = EventBus()
+        bus.subscribe(lambda event: self._emit(job, event))
+        targets = job.payload["targets"]
+        options = job.payload["options"]
+
+        self._emit(job, {"type": "job_start", "kind": "recompute",
+                         "participants": job.participants, "n_targets": len(targets),
+                         "options": options, "dry_run": False})
+
+        recorder = batches.BatchRecorder(
+            self.config, stage="RECOMP", mode="recompute", initials=job.initials,
+            participants=job.participants,
+        )
+        job.batch_id = recorder.id
+        job.recorder = recorder
+        bus.subscribe(recorder)
+        self._emit(job, {"type": "batch_start", "batch_id": recorder.id,
+                         "initials": recorder.initials})
+
+        made: list[dict[str, Any]] = []
+        failed = 0
+        for t in targets:
+            if job.cancel_event.is_set():
+                break
+            label = f"{t['participant']} / {t['season']} / {t['stem']}"
+            try:
+                record = variants.create(
+                    self.config, t["participant"], t["season"], t["stem"], options,
+                    job.initials, bus, device=t.get("device", "actigraph"),
+                    batch_id=recorder.id, cohort=job.payload.get("cohort"),
+                )
+                made.append(record)
+            except tools.ToolCancelled:
+                bus.emit("item_cancelled", label=label, reason="stopped")
+                break
+            except Exception as exc:  # noqa: BLE001 - report, keep going
+                failed += 1
+                bus.emit("item_error", label=label, error=f"{type(exc).__name__}: {exc}")
+
+        job.status = "cancelled" if job.cancel_event.is_set() else ("error" if failed and not made else "done")
+        job.recorder = None
+        changed = variants.changed_from_baseline(options)
+        record = recorder.finish(
+            job.status,
+            # Public: what was varied and how many - never an ID, path or filename.
+            public_extra={"step1_options": options, "changed": changed,
+                          "n_variants": len(made), "n_failed": failed,
+                          "experimental": True},
+            private_extra={"targets": targets,
+                           "variants": [{k: v for k, v in r.items() if k != "tool_versions"}
+                                        for r in made]},
+        )
+        self._emit(job, {"type": "batch_end", "batch_id": recorder.id,
+                         "n_variants": len(made), "n_failed": failed})
+        self._emit(job, {"type": "job_end", "status": job.status, "dry_run": False,
+                         "kind": "recompute", "n_variants": len(made)})
 
     # -- event fan-out -------------------------------------------------------
     def _emit(self, job: Job, event: dict[str, Any]) -> None:

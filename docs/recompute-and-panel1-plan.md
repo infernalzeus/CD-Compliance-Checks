@@ -157,6 +157,7 @@ colour or a verdict.
 | How it is surfaced | **Visible and enabled, tagged `experimental`** in the modal, in `variant.json` and in the batch record. |
 | Missing raw `.bin` | **Refuse**, naming the recording that needs a force reprocess. Recompute never touches OneDrive. |
 | Compliance on a variant | **Never run.** The 60 s verdict is the only verdict. |
+| Cohort lineage | A recompute makes a **derived cohort**: a **subset** of its parent, never larger, and linked to it. Visualise always makes **fresh** cohorts. |
 | Pseudonymisation | **Stays off.** Add a settings location editor first (see E). |
 
 ### B2 · Where a variant lives
@@ -206,6 +207,54 @@ one directory to delete; and the folder name itself is the tag
   "tool_versions": {"step1": "<sha>", "step2": "<sha>"}
 }
 ```
+
+### B2b · Cohort lineage — fresh vs derived
+
+A recompute does not only produce files. It produces a **derived cohort**, and
+cohorts now come in two kinds:
+
+| Kind | Where it comes from | Parent |
+|---|---|---|
+| **Fresh** | Visualise → **SEND TO T2**. A new selection chosen from the grid. | none — it is a root |
+| **Derived** | **Recompute** on a cohort that already exists in T2. | the cohort it was recomputed from |
+
+**The invariant: a derived cohort is a subset of its parent — never larger.**
+You can recompute all of a cohort, or any part of it, but you can never pick up
+a participant-season that was not in the parent. If you want more, that is a
+*fresh* cohort from Visualise, not a recompute.
+
+Enforced in `t2_selections.send()`:
+
+```python
+if sel.parent_batch_id:
+    parent = read_selection(config, sel.parent_batch_id)
+    extra = set(sel.keys()) - set(parent.keys())        # (participant, season, device)
+    if extra:
+        raise SelectionError(
+            "a recompute cohort cannot be larger than the one it came from; "
+            "these are not in the parent: " + ", ".join(sorted(extra)))
+```
+
+`T2Selection` gains `parent_batch_id: str | None` and `derived_from: str | None`
+(the `RECOMP` batch that produced it). Both go in the **private** record;
+the public record carries only `"derived": true` and the parent's **stage and
+date**, never its id, since a batch id is not identifying but the pairing adds
+nothing public.
+
+**Why the linkage matters.** Without it, a derived cohort looks like any other
+selection in the T2 list, and six weeks later nobody can tell that
+`T2-20261103-YK-s1` is the 30 s re-read of `T2-20260918-001143-YK-s1`. With it,
+the T2 panel can show the list as a tree — fresh cohorts as roots, derived ones
+nested beneath with the parameter that produced them:
+
+```
+T2-20260918-001143-YK-s1          fresh · 12 participants
+  └─ T2-20261103-143000-YK-s1     derived · epoch 30 s · 4 participants
+```
+
+and `discard` (§ C) can walk it: discarding a parent must refuse while a
+derived cohort still points at it, exactly as it already refuses while an
+export points at a variant.
 
 ### B3 · A new batch stage
 

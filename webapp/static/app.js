@@ -1742,6 +1742,314 @@ function dayButtons() {
 
 $("#t2-export").addEventListener("click", openExport);
 $("#t2x-cancel").addEventListener("click", () => $("#t2x-modal").classList.add("hidden"));
+
+/* -- T2 > Recompute - Step 1 only -------------------------------------------
+   Re-runs Step 1 with different settings on recordings already inside this
+   cohort. It adds an epoch file to _variants/; it never replaces the baseline,
+   never runs Step 2 and never produces a verdict. */
+const t2rec = { spec: null, rows: [], picked: new Set(), job: null };
+
+$("#t2-recompute").addEventListener("click", openRecompute);
+$("#t2r-cancel").addEventListener("click", () => $("#t2r-modal").classList.add("hidden"));
+$("#t2r-initials").addEventListener("input", updateRecomputeState);
+
+async function openRecompute() {
+  if (!t2State.id) return;
+  const modal = $("#t2r-modal");
+  modal.classList.remove("hidden");
+  $("#t2r-note").textContent = "";
+  $("#t2r-warn").innerHTML = "";
+  // reset anything a previous run left behind
+  $("#t2r-opts").style.display = "";
+  $("#t2r-go").style.display = "";
+  $("#t2r-go").disabled = true;
+  $("#t2r-cancel").textContent = "Close";
+  t2rec.progress = null;
+  $("#t2r-body").innerHTML = '<div class="muted">loading recordings...</div>';
+  $("#t2r-initials").value = currentInitials() || "";
+  t2rec.picked = new Set();
+
+  if (!t2rec.spec) {
+    t2rec.spec = await api("/api/t2/step1-options").catch(() => null);
+    if (!t2rec.spec) {
+      $("#t2r-body").innerHTML = '<div class="agg-note bad">could not load the Step 1 options</div>';
+      return;
+    }
+  }
+  renderRecomputeOptions();
+
+  const r = await api("/api/t2/selections/" + encodeURIComponent(t2State.id) + "/recordings")
+    .catch(() => ({ error: "request failed" }));
+  if (r.error) {
+    $("#t2r-body").innerHTML = '<div class="agg-note bad">' + esc(r.error) + "</div>";
+    return;
+  }
+  t2rec.rows = r.recordings || [];
+  renderRecomputeRows();
+  updateRecomputeState();
+}
+
+function renderRecomputeOptions() {
+  const host = $("#t2r-opts");
+  host.innerHTML = "";
+  const spec = t2rec.spec.options, base = t2rec.spec.baseline;
+  host.appendChild(el("div", "t2r-optnote",
+    "Step 1 settings. Anything left at its baseline is unchanged \u2014 you must change at least one to make a variant."));
+  Object.keys(spec).forEach((key) => {
+    const o = spec[key];
+    const id = "t2r-o-" + key;
+    const input = o.choices
+      ? '<select id="' + id + '">' + o.choices.map((c) =>
+          '<option value="' + esc(c) + '"' + (c === base[key] ? " selected" : "") + ">" +
+          esc(c) + (c === base[key] ? " (baseline)" : "") + "</option>").join("") + "</select>"
+      : '<input id="' + id + '" type="text" value="' + esc(base[key]) + '" size="6">';
+    const row = el("label", "t2r-opt");
+    row.innerHTML = '<span class="t2r-k">' + esc(o.label) + "</span>" + input +
+                    '<span class="t2r-help">' + esc(o.help || "") + "</span>";
+    host.appendChild(row);
+  });
+  host.querySelectorAll("select,input").forEach((n) =>
+    n.addEventListener("change", updateRecomputeState));
+}
+
+function recomputeOptions() {
+  const out = {};
+  Object.keys(t2rec.spec.options).forEach((key) => {
+    const n = document.getElementById("t2r-o-" + key);
+    if (n) out[key] = n.value.trim();
+  });
+  return out;
+}
+
+function recomputeChanged() {
+  const base = t2rec.spec.baseline, now = recomputeOptions();
+  return Object.keys(now).filter((k) => String(now[k]) !== String(base[k]));
+}
+
+function renderRecomputeRows() {
+  const host = $("#t2r-body");
+  host.innerHTML = "";
+  if (!t2rec.rows.length) {
+    host.innerHTML = '<div class="muted">No Actigraph recordings in this cohort.</div>';
+    return;
+  }
+  const ok = t2rec.rows.filter((r) => r.raw_present);
+  host.appendChild(el("div", "xd-what",
+    "<b>" + ok.length + "</b> of " + t2rec.rows.length + " recording(s) can be recomputed. " +
+    "Pick the ones you want \u2014 a recompute can only ever cover recordings already in this cohort."));
+
+  const pickAll = el("div", "t2r-all");
+  pickAll.innerHTML = '<button class="btn ghost tiny" id="t2r-all-on">select all</button>' +
+                      '<button class="btn ghost tiny" id="t2r-all-off">none</button>';
+  host.appendChild(pickAll);
+
+  const tbl = el("table", "tbl t2r-tbl");
+  tbl.innerHTML = "<tr><th></th><th>participant</th><th>season</th><th>recording</th>" +
+                  "<th>verdict</th><th>raw</th><th>existing variants</th></tr>";
+  t2rec.rows.forEach((r, i) => {
+    const key = r.participant + "|" + r.season + "|" + r.stem;
+    const tr = document.createElement("tr");
+    if (!r.raw_present) tr.className = "t2r-blocked";
+    const tags = (r.variants || []).length
+      ? (r.variants || []).map((v) =>
+          '<span class="t2r-vtag" title="' + esc(v.variant_id) + '">' +
+          esc(Object.keys(v.changed || {}).map((k) => k + " " + v.changed[k].variant).join(", ") || "step1") +
+          "</span>").join(" ")
+      : "\u2014";
+    tr.innerHTML =
+      "<td>" + (r.raw_present
+        ? '<input type="checkbox" data-k="' + esc(key) + '" id="t2r-c-' + i + '">'
+        : "\u2014") + "</td>" +
+      "<td>" + esc(r.participant) + "</td><td>" + esc(r.season) + "</td>" +
+      '<td class="mono small">' + esc(r.stem) + "</td>" +
+      "<td>" + (r.verdict
+        ? '<span class="verdict ' + esc(r.verdict) + '">' + esc(r.verdict) + "</span>"
+        : "\u2014") + "</td>" +
+      '<td class="small">' + (r.raw_present
+        ? r.raw_mb + " MB"
+        : '<span class="hint bad">' + esc(r.blocked || "") + "</span>") + "</td>" +
+      '<td class="small">' + tags + "</td>";
+    tbl.appendChild(tr);
+  });
+  host.appendChild(tbl);
+
+  tbl.querySelectorAll("input[type=checkbox]").forEach((cb) =>
+    cb.addEventListener("change", () => {
+      if (cb.checked) t2rec.picked.add(cb.dataset.k); else t2rec.picked.delete(cb.dataset.k);
+      updateRecomputeState();
+    }));
+  $("#t2r-all-on", pickAll).addEventListener("click", () => {
+    tbl.querySelectorAll("input[type=checkbox]").forEach((cb) => {
+      cb.checked = true; t2rec.picked.add(cb.dataset.k);
+    });
+    updateRecomputeState();
+  });
+  $("#t2r-all-off", pickAll).addEventListener("click", () => {
+    tbl.querySelectorAll("input[type=checkbox]").forEach((cb) => { cb.checked = false; });
+    t2rec.picked.clear();
+    updateRecomputeState();
+  });
+}
+
+function updateRecomputeState() {
+  const changed = t2rec.spec ? recomputeChanged() : [];
+  const n = t2rec.picked.size;
+  const initialsOk = /^[A-Za-z]{2,4}$/.test(($("#t2r-initials").value || "").trim());
+  const todo = [];
+  if (!changed.length) todo.push("change at least one Step 1 setting");
+  if (!n) todo.push("pick at least one recording");
+  if (!initialsOk) todo.push("enter your initials");
+  $("#t2r-todo").innerHTML = todo.length
+    ? '<span class="hint">still to do: ' + todo.map(esc).join(" \u00b7 ") + "</span>"
+    : '<span class="hint ok">' + n + " recording(s) \u00b7 " + changed.map(esc).join(", ") + "</span>";
+  $("#t2r-go").disabled = todo.length > 0;
+
+  const warn = $("#t2r-warn");
+  const opts = t2rec.spec ? recomputeOptions() : {};
+  if (changed.indexOf("epoch") >= 0) {
+    warn.innerHTML =
+      "<b>At " + esc(opts.epoch) + " epochs, not every measure stays comparable.</b> " +
+      "Hours (M10/L5 onset), IS, IV and the chi-square periodogram are comparable with the 60 s " +
+      "baseline. <b>Activity levels</b> (M10/L5 level, Enright amplitude) scale with epoch length " +
+      "and are not. <b>SRI</b> is biased downward, because the Cole-Kripke kernel spans half the " +
+      "real time. Compliance is not re-evaluated at all \u2014 the 60 s verdict stands.";
+    warn.style.display = "";
+  } else {
+    warn.innerHTML = "";
+    warn.style.display = "none";
+  }
+}
+
+$("#t2r-go").addEventListener("click", async () => {
+  const targets = [...t2rec.picked].map((k) => {
+    const bits = k.split("|");
+    return { participant: bits[0], season: bits[1], stem: bits[2], device: "actigraph" };
+  });
+  const initials = ($("#t2r-initials").value || "").trim().toUpperCase();
+  $("#t2r-go").disabled = true;
+  $("#t2r-note").textContent = "starting...";
+  const r = await postJSON("/api/t2/recompute", {
+    cohort: t2State.id, targets, options: recomputeOptions(), initials,
+  }).catch(() => ({ error: "request failed" }));
+  if (r.error) {
+    $("#t2r-note").innerHTML = '<span class="hint bad">' + esc(r.error) + "</span>";
+    $("#t2r-go").disabled = false;
+    return;
+  }
+  t2rec.job = r.job_id;
+  openJobSocket(r.job_id, false);          // keeps the Compliance tab log too
+  startRecomputeProgress(r.job_id, r.job.batch_id || r.job_id, r.n_targets);
+});
+
+/* Progress, inline. The bar counts finished recordings - Step 1 publishes no
+   percentage of its own, so a determinate bar from its output would be a lie. */
+function startRecomputeProgress(jobId, batchId, total) {
+  const st = { total, done: 0, failed: 0, lines: [], finished: false };
+  t2rec.progress = st;
+  $("#t2r-opts").style.display = "none";
+  $("#t2r-warn").style.display = "none";
+  $("#t2r-go").style.display = "none";
+  $("#t2r-todo").innerHTML = "";
+  $("#t2r-note").innerHTML = '<span class="hint">batch <b>' + esc(batchId) + "</b></span>";
+
+  const body = $("#t2r-body");
+  body.innerHTML =
+    '<div class="t2r-prog">' +
+      '<div class="t2r-prog-head">' +
+        '<span id="t2r-p-state">starting\u2026</span>' +
+        '<button class="btn ghost danger tiny" id="t2r-stop">\u25a0 Stop</button>' +
+      "</div>" +
+      '<div class="t2r-bar"><i id="t2r-bar-i"></i></div>' +
+      '<div class="t2r-prog-sub" id="t2r-p-sub"></div>' +
+      '<div class="t2r-plog" id="t2r-plog"></div>' +
+    "</div>";
+
+  $("#t2r-stop").addEventListener("click", async () => {
+    $("#t2r-stop").disabled = true;
+    pLog("stopping\u2026", "warn");
+    try { await fetch("/api/jobs/" + jobId + "/stop", { method: "POST" }); }
+    catch (_) { pLog("stop request failed", "bad"); }
+  });
+
+  const ws = new WebSocket("ws://" + location.host + "/ws/jobs/" + jobId);
+  ws.onmessage = (ev) => recomputeEvent(JSON.parse(ev.data), st);
+  ws.onerror = () => pLog("lost the progress connection (the job keeps running)", "bad");
+}
+
+function pLog(text, cls) {
+  const box = $("#t2r-plog");
+  if (!box) return;
+  const line = el("div", "t2r-pline " + (cls || ""), esc(text));
+  box.appendChild(line);
+  while (box.childElementCount > 120) box.removeChild(box.firstChild);
+  box.scrollTop = box.scrollHeight;
+}
+
+function pBar(st) {
+  const i = $("#t2r-bar-i");
+  if (!i) return;
+  const n = st.done + st.failed;
+  i.style.width = (st.total ? Math.round((n / st.total) * 100) : 0) + "%";
+  i.className = st.failed ? "bad" : "";
+  const sub = $("#t2r-p-sub");
+  if (sub) {
+    sub.textContent = n + " of " + st.total + " done" +
+      (st.failed ? " \u00b7 " + st.failed + " failed" : "");
+  }
+}
+
+function recomputeEvent(e, st) {
+  if (st.finished) return;
+  switch (e.type) {
+    case "variant_start":
+      $("#t2r-p-state").textContent = "epoching " + (e.label || "");
+      pLog("\u25b6 " + (e.label || ""), "head");
+      break;
+    case "step_start":
+      pLog("  " + (e.name || "step") + " started");
+      break;
+    case "step_stdout": {
+      const t = String(e.line || "").trim();
+      if (t) pLog("  " + t.slice(0, 160));
+      break;
+    }
+    case "step_done":
+      pLog("  " + (e.name || "step") + " finished in " +
+           (e.seconds != null ? e.seconds.toFixed(1) + "s" : "?"), "ok");
+      break;
+    case "variant_done":
+      st.done += 1; pBar(st);
+      pLog("\u2713 wrote " + (e.output || "the epoch file"), "ok");
+      break;
+    case "item_error":
+      st.failed += 1; pBar(st);
+      pLog("\u2717 " + (e.label || "") + ": " + (e.error || ""), "bad");
+      break;
+    case "item_cancelled":
+      pLog("\u25a0 stopped: " + (e.label || ""), "warn");
+      break;
+    case "log":
+      if (e.message) pLog("  " + e.message, e.level === "error" ? "bad" : e.level === "warning" ? "warn" : "");
+      break;
+    case "job_end": {
+      st.finished = true;
+      pBar(st);
+      const stop = $("#t2r-stop");
+      if (stop) stop.style.display = "none";
+      const ok = st.done > 0 && !st.failed;
+      $("#t2r-p-state").innerHTML = ok
+        ? '<span class="hint ok">finished \u2014 ' + st.done + " variant(s) written</span>"
+        : '<span class="hint ' + (st.done ? "warn" : "bad") + '">' + esc(e.status) +
+          " \u2014 " + st.done + " written, " + st.failed + " failed</span>";
+      pLog("\u25a0 " + e.status, ok ? "ok" : "bad");
+      $("#t2r-cancel").textContent = "Done";
+      // refresh the recording list so new variants show against their rows
+      if (st.done) t2rec.rows = [];
+      break;
+    }
+  }
+}
+
 $("#t2x-modal").addEventListener("click", (e) => { if (e.target.id === "t2x-modal") $("#t2x-modal").classList.add("hidden"); });
 $("#t2x-go").addEventListener("click", runExport);
 $("#t2x-initials").addEventListener("input", (ev) => {

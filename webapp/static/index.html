@@ -185,7 +185,7 @@
         <h2 id="t2-title">T2 preview</h2>
         <div class="head-right">
           <span class="pill" id="t2-privacy"></span>
-          <button class="btn" id="t2-recompute" disabled title="Not built yet: re-run the device tools with different built-in thresholds (light floor, non-wear rule, epoch length). That reprocesses from the raw data, so it will live here as its own step.">Recompute…</button>
+          <button class="btn" id="t2-recompute" title="Re-run Step 1 only, with different settings (e.g. a 30 s epoch), on recordings in this cohort. Adds an extra epoch file beside the baseline — it never replaces it, never runs Step 2, and never changes a compliance verdict.">Recompute…</button>
           <button class="btn primary" id="t2-export" title="See exactly which files would be written, then write them">Export…</button>
         </div>
       </div>
@@ -258,6 +258,33 @@
           </div>
         </div>
         <div class="modal-note" id="t2x-note"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- T2 -> Recompute: a Step 1 variant beside a recording in this cohort -->
+  <div class="modal hidden" id="t2r-modal">
+    <div class="modal-box wide">
+      <h3>Recompute &mdash; Step 1 only <span class="pill warn" id="t2r-exp">experimental</span></h3>
+      <p class="modal-sub">Re-runs <b>Step 1</b> with different settings on recordings already in this
+        cohort. It writes an <b>extra</b> epoch file into <code>_variants/</code> beside the baseline.
+        It does <b>not</b> replace the baseline, does <b>not</b> run Step 2, and does
+        <b>not</b> change any compliance verdict &mdash; the 60&nbsp;s result stays the only verdict.</p>
+      <div id="t2r-opts" class="t2r-opts"></div>
+      <div id="t2r-warn" class="modal-note"></div>
+      <div id="t2r-body"><div class="muted">loading recordings&hellip;</div></div>
+      <div class="t2m-foot">
+        <div class="t2m-footrow">
+          <label class="t2m-initrow"><span class="t2m-lbl">Run by</span>
+            <input id="t2r-initials" class="t2m-input initials-in" type="text" maxlength="4" autocomplete="off" spellcheck="false" placeholder="YK" />
+          </label>
+          <div class="t2m-todo" id="t2r-todo"></div>
+          <div class="modal-actions">
+            <button class="btn ghost" id="t2r-cancel">Close</button>
+            <button class="btn primary" id="t2r-go" disabled>Recompute</button>
+          </div>
+        </div>
+        <div class="modal-note" id="t2r-note"></div>
       </div>
     </div>
   </div>
