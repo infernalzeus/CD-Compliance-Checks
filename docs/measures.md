@@ -50,7 +50,7 @@ repo. It is what produces the PASS / REVIEW / FAIL verdict.
 > and three of the rows are outright wrong at any epoch length other than 60 s.
 > This is the reason a recompute variant **does not run compliance at all**: the
 > 60 s baseline is the only thing that produces a verdict. See
-> [`recompute-and-panel1-plan.md`](recompute-and-panel1-plan.md) § A.
+> the recompute plan (`_local/plans/recompute-and-panel1-plan.md`, local only) § A.
 
 ---
 

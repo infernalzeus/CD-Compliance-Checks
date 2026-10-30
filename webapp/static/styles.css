@@ -707,3 +707,211 @@ table.tbl.mtx th, table.tbl.mtx td { padding: 3px 6px; text-align: center; }
 .t2r-pline.ok   { color: #7ee2a0; }
 .t2r-pline.warn { color: #ffd98a; }
 .t2r-pline.bad  { color: #ff9b9b; }
+
+/* ---- Panel 1 right: tabs ---------------------------------------------------
+   One pane at a time. Four stacked boxes meant scrolling past three things to
+   read the fourth, and the progress list sat above everything actionable. */
+.rtabs { display: flex; gap: 4px; margin: 0 0 11px;
+         border-bottom: 1px solid var(--line); padding-bottom: 0; }
+.rtab { display: flex; align-items: center; gap: 6px; cursor: pointer;
+        font: inherit; font-size: 12px; font-weight: 600; color: var(--muted);
+        background: transparent; border: 1px solid transparent; border-bottom: none;
+        border-radius: 8px 8px 0 0; padding: 7px 12px; margin-bottom: -1px; }
+.rtab:hover { color: var(--text); background: var(--panel2); }
+.rtab.active { color: var(--text); background: var(--panel2);
+               border-color: var(--line); border-bottom-color: var(--panel2); }
+.rbadge { display: none; font-size: 10px; font-weight: 700; line-height: 1;
+          padding: 2px 6px; border-radius: 999px; background: var(--line); color: var(--text); }
+.rbadge.on { display: inline-block; }
+.rbadge.todo { background: #1d3157; color: #9dc0ff; }
+.rbadge.warn { background: #4a3714; color: #ffd98a; }
+.rpane { min-height: 220px; }
+.rpane.hidden { display: none; }
+.pane-sub { font-size: 11px; letter-spacing: 1px; color: var(--muted); margin-bottom: 7px; }
+
+/* ---- Panel 1 right: the season matrix --------------------------------------
+   Participants down, up to four seasons across, devices as dots inside the
+   cell. State is carried by a left edge and a faint tint, so a 12-row matrix
+   reads at a glance; the tick is a ring, so selection and state never fight. */
+.sb-bar { display: flex; align-items: baseline; justify-content: space-between;
+          gap: 10px; margin-bottom: 9px; }
+.sb-sum { font-size: 12px; color: var(--muted); }
+.sb-sum b { color: var(--text); }
+.sb-ok   { color: #7ee2a0; }
+.sb-todo { color: #9dc0ff; }
+.sb-miss { color: var(--orange); }
+.sb-head-right { display: flex; align-items: center; gap: 6px; }
+
+.sbm { display: flex; flex-direction: column; gap: 4px; max-height: 40vh;
+       overflow: auto; padding-right: 2px; }
+.sbm-row { display: grid; grid-template-columns: 62px repeat(var(--sb-cols, 4), minmax(0, 1fr));
+           gap: 4px; align-items: stretch; }
+.sbm-row.head .sbm-pid, .sbm-col { font-size: 10px; letter-spacing: .7px;
+           text-transform: uppercase; color: var(--muted); }
+.sbm-pid { display: flex; align-items: center; font-size: 11.5px; font-weight: 700;
+           color: var(--text); background: transparent; border: none;
+           padding: 0 2px; overflow: hidden; text-overflow: ellipsis; }
+.sbm-pid.pick { cursor: pointer; font: inherit; font-size: 11.5px; font-weight: 700; }
+.sbm-pid.pick:hover { color: var(--accent); }
+.sbm-col { cursor: pointer; background: transparent; border: none;
+           font: inherit; font-size: 10px; letter-spacing: .7px; text-align: left;
+           padding: 0 0 2px 7px; }
+.sbm-col:hover { color: var(--accent); }
+
+.sbm-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+            position: relative; cursor: pointer; text-align: left; font: inherit;
+            padding: 5px 7px; min-width: 0; overflow: hidden;
+            background: var(--panel2); color: var(--text);
+            border: 1px solid var(--line); border-left: 3px solid var(--grey);
+            border-radius: 7px; transition: border-color .12s, background .12s; }
+.sbm-cell:hover:not(.ghostslot) { background: #232834; }
+.sbm-cell.ok   { border-left-color: var(--green);  background: #16211b; }
+.sbm-cell.warn { border-left-color: var(--orange); background: #231d12; }
+.sbm-cell.todo { border-left-color: var(--accent); background: #161c28; }
+.sbm-cell.none { border-left-color: var(--grey); }
+.sbm-cell.picked { border-color: var(--accent);
+                   box-shadow: 0 0 0 1px var(--accent) inset; }
+.sbm-cell.picked::after { content: "\2713"; position: absolute; top: 3px; right: 5px;
+                          font-size: 10px; color: var(--accent); font-weight: 700; }
+.sbm-cell.ghostslot { opacity: .4; cursor: not-allowed; border-style: dashed;
+                      border-left-style: dashed; background: transparent; }
+.sbm-lab { font-size: 11.5px; font-weight: 600; white-space: nowrap;
+           overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.sbm-q   { color: var(--orange); }
+.sbm-sub { font-size: 10px; color: var(--muted); }
+.sbm-dots { display: flex; gap: 3px; margin-top: 3px; }
+.sbm-dots i { width: 7px; height: 7px; border-radius: 2px; background: var(--grey); }
+.sbm-dots i.ok   { background: var(--green); }
+.sbm-dots i.warn { background: var(--orange); }
+.sbm-dots i.todo { background: var(--accent); }
+.sbm-dots i.none { background: #2b303b; }
+.sbm-extra, .sbm-note { font-size: 10.5px; color: var(--orange); padding: 2px 2px 0 64px; }
+.sbm-note { color: var(--muted); padding-left: 2px; }
+
+.sb-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 11px;
+             font-size: 10.5px; color: var(--muted); margin: 9px 0 0; }
+.sb-legend i.lg { display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+                  margin-right: 5px; vertical-align: -1px; background: var(--grey); }
+.sb-legend i.lg.ok { background: var(--green); }
+.sb-legend i.lg.warn { background: var(--orange); }
+.sb-legend i.lg.todo { background: var(--accent); }
+.sb-legend-hint { margin-left: auto; opacity: .7; }
+
+/* devices the buttons apply to, and what the ticked cells add up to */
+.sb-foot { margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--line); }
+.sb-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 9px; }
+.sb-chip { cursor: pointer; font: inherit; font-size: 11px; text-transform: capitalize;
+           padding: 3px 10px; border-radius: 999px; background: var(--panel2);
+           color: var(--muted); border: 1px solid var(--line); }
+.sb-chip:hover:not(:disabled) { color: var(--text); }
+.sb-chip.on { background: #1d2636; color: #9dc0ff; border-color: var(--accent); }
+.sb-chip.off { opacity: .4; cursor: not-allowed; border-style: dashed; }
+
+.sb-roll { display: flex; flex-direction: column; gap: 4px; }
+.sb-rollrow { display: grid; grid-template-columns: 90px 1fr 1fr auto; gap: 8px;
+              align-items: center; font-size: 11.5px; padding: 5px 9px;
+              background: var(--panel2); border: 1px solid var(--line);
+              border-left: 3px solid var(--grey); border-radius: 7px;
+              text-transform: capitalize; }
+.sb-rollrow.ok   { border-left-color: var(--green); }
+.sb-rollrow.todo { border-left-color: var(--accent); }
+.sb-rollmeta { color: var(--muted); font-size: 11px; text-transform: none; }
+.sb-verdicts { display: flex; gap: 4px; justify-content: flex-end; }
+
+.sb-acts { display: flex; align-items: center; gap: 7px; margin-top: 10px; }
+.sb-spacer { flex: 1; }
+.sb-plan { font-size: 11px; color: var(--muted); }
+.btn.warn { border-color: #5a4418; color: #ffd98a; }
+.btn.tiny:disabled { opacity: .42; cursor: not-allowed; }
+
+/* ---- Panel 2: recordings, grouped ------------------------------------------
+   Participant -> season -> device, because that is how the study is organised.
+   One flat strip of "CD011 . Autumn 2025" buttons mixed all three together. */
+.recbox-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.rec-tools { display: flex; gap: 5px; }
+.rectree { max-height: 34vh; overflow: auto; display: flex; flex-direction: column; gap: 5px; }
+.rec-p { border: 1px solid var(--line); border-radius: 9px; background: var(--panel2);
+         overflow: hidden; }
+.rec-p.open { border-color: #39404f; }
+.rec-phead { display: flex; align-items: center; gap: 8px; width: 100%; cursor: pointer;
+             font: inherit; font-size: 12.5px; color: var(--text); text-align: left;
+             background: transparent; border: none; padding: 7px 10px; }
+.rec-phead:hover { background: #232834; }
+.rec-caret { color: var(--muted); font-size: 10px; width: 10px; }
+.rec-meta { margin-left: auto; font-size: 11px; color: var(--muted); }
+.rec-s { padding: 2px 10px 8px 28px; }
+.rec-shead { font-size: 10.5px; letter-spacing: .6px; text-transform: uppercase;
+             color: var(--muted); margin: 5px 0 4px; }
+.rec-devs { display: flex; flex-wrap: wrap; gap: 5px; }
+.rec-dev { display: flex; align-items: center; gap: 7px; cursor: pointer; font: inherit;
+           font-size: 11.5px; text-transform: capitalize; color: var(--text);
+           background: var(--bg); border: 1px solid var(--line);
+           border-left: 3px solid var(--grey); border-radius: 7px; padding: 5px 9px; }
+.rec-dev:hover { background: #1b2030; }
+.rec-dev.picked { border-color: var(--accent); border-left-color: var(--accent);
+                  box-shadow: 0 0 0 1px rgba(79,140,255,.35) inset; }
+.rec-days { font-size: 10.5px; color: var(--muted); text-transform: none; }
+
+/* ---- Panel 2: coverage / overlap -------------------------------------------
+   Two devices can both be complete and still cover different weeks. The bar is
+   each device's days as a share of the union of days for that season.
+   Prefixed p2- : T2's coverage table already owns .cov-bar / .cov-track. */
+.coverage { display: flex; flex-direction: column; gap: 12px;
+            max-height: 58vh; overflow: auto; }
+.cov-bar-area { display: flex; flex-direction: column; gap: 4px; }
+.p2-bars { display: flex; flex-direction: column; gap: 5px; }
+.p2-bar { display: grid; grid-template-columns: 78px minmax(60px, 1fr) auto; gap: 9px;
+          align-items: center; font-size: 11px; }
+.p2-dev { text-transform: capitalize; color: var(--text); white-space: nowrap; }
+.p2-track { height: 7px; border-radius: 4px; background: #11141b;
+            border: 1px solid var(--line); overflow: hidden; }
+.p2-track > i { display: block; height: 100%; background: var(--accent); }
+.p2-meta { color: var(--muted); font-size: 10.5px; white-space: nowrap; }
+
+/* The summary strip above the matrix. Not .cov-bar: T2 owns that, absolutely
+   positioned, and it would sit on top of the content below. */
+.cov-topbar { display: flex; align-items: baseline; justify-content: space-between;
+              gap: 10px; margin-bottom: 10px; }
+.cov-topbar .chk { white-space: nowrap; }
+.cov-sum { font-size: 12px; color: var(--muted); }
+.cov-sum b { color: var(--text); }
+.cov-ok { color: #7ee2a0; } .cov-warn { color: #ffd98a; } .cov-bad { color: #ff9b9b; }
+.cov-h { font-size: 11px; letter-spacing: .8px; text-transform: uppercase;
+         color: var(--muted); margin: 0 0 7px; }
+.cov-sub { font-size: 10.5px; color: var(--muted); margin: 10px 0 5px; }
+.cov-shared, .cov-p { display: block; }
+
+.cov-strip { display: flex; flex-wrap: wrap; gap: 6px; }
+.cov-chip { display: flex; flex-direction: column; gap: 3px; padding: 7px 10px;
+            background: var(--panel2); border: 1px solid var(--line);
+            border-left: 3px solid var(--accent); border-radius: 8px; font-size: 11.5px; }
+.cov-chipmeta { font-size: 10.5px; color: var(--muted); }
+.cov-dots { display: flex; gap: 4px; }
+.cov-dots i { font-style: normal; font-size: 9.5px; letter-spacing: .4px;
+              text-transform: uppercase; color: #9dc0ff; background: #1d2636;
+              border-radius: 4px; padding: 1px 5px; }
+
+.cov-season { background: var(--panel2); border: 1px solid var(--line);
+              border-left: 3px solid var(--grey); border-radius: 9px;
+              padding: 9px 11px; margin-bottom: 7px; }
+.cov-season.ok   { border-left-color: var(--green); }
+.cov-season.warn { border-left-color: var(--orange); }
+.cov-season.bad  { border-left-color: var(--red); }
+.cov-stop { display: flex; align-items: baseline; gap: 9px; margin-bottom: 8px;
+            flex-wrap: wrap; }
+.cov-n { font-size: 10px; font-weight: 700; letter-spacing: .6px; color: var(--muted); }
+.cov-lab { font-size: 12.5px; }
+.cov-span { font-size: 10.5px; color: var(--muted); }
+.cov-agree { margin-left: auto; font-size: 10.5px; color: var(--muted); }
+.cov-pairs { margin-top: 7px; font-size: 10.5px; color: var(--muted); }
+
+.cov-srow { display: grid; grid-template-columns: 96px 28px 88px 1fr auto; gap: 9px;
+            align-items: center; font-size: 11px; padding: 5px 9px; border-radius: 6px;
+            background: var(--panel2); border: 1px solid var(--line);
+            border-left: 3px solid var(--grey); margin-bottom: 4px; }
+.cov-srow.ok  { border-left-color: var(--green); }
+.cov-srow.bad { border-left-color: var(--orange); }
+.cov-sname { text-transform: capitalize; }
+.cov-sord, .cov-sdate, .cov-starget { color: var(--muted); }
+.cov-sverdict { color: var(--muted); font-size: 10.5px; text-align: right; }
+.cov-srow.bad .cov-sverdict { color: #ffd98a; }

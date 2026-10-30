@@ -289,8 +289,15 @@ $("#set-save").addEventListener("click", async () => {
 
 // ================================================================== PANEL 1
 const runGrid = new GridController("#grid-run", "#sel-count-run", (sel) => {
+  // The staging file tree is only meaningful for one folder; everything else on
+  // the right works over the whole selection.
   if (sel.length === 1) loadSourceTree(sel[0]);
-  else $("#filetree").innerHTML = `<div class="muted">Select a single cell to view its staging files.</div>`;
+  else {
+    $("#filetree").innerHTML = `<div class="muted">Select a single cell to view its staging files.</div>`;
+    $("#fb-participant").textContent = "";
+    setRBadge("files", "");
+  }
+  loadSeasonBoard(sel);
   loadFlags(sel);
   updateRunPlan();
 }).setUrl("/api/panel1/grid-stream");
@@ -329,6 +336,7 @@ async function loadFlags(participants) {
   const box = $("#flaglist");
   if (!participants.length) {
     $("#flag-scope").textContent = "";
+    setRBadge("naming", "");
     box.innerHTML = `<div class="muted">Select folders to see naming issues in their input files.</div>`;
     return null;
   }
@@ -342,6 +350,8 @@ async function loadFlags(participants) {
     body: JSON.stringify({ participants }),
   }).catch(() => null);
   if (mine !== flagReq) return data;            // a newer selection superseded this
+  const issues = ((data && data.flags) || []).filter((f) => f.severity !== "info").length;
+  setRBadge("naming", issues ? String(issues) : "", issues ? "warn" : "");
   if (participants.length === 1) {
     // One folder: show the convention beside every file, not just the problems.
     const view = await api(`/api/participant/${encodeURIComponent(participants[0])}/naming`).catch(() => null);
@@ -449,6 +459,414 @@ function renderFlagList(box, data, { showInfo = false, limit = 200 } = {}) {
 }
 
 $("#clear-run").addEventListener("click", () => runGrid.clear());
+
+/* -- Panel 1 right: one column, four views ----------------------------------
+   Stacked boxes meant scrolling past three things to read the fourth. One pane
+   shows at a time; each tab carries the count of what it is hiding. */
+let rPaneManual = false;          // did the user pick the pane themselves?
+
+function showRPane(which, manual) {
+  if (manual) rPaneManual = true;
+  $$(".rtab").forEach((t) => t.classList.toggle("active", t.dataset.rtab === which));
+  $$(".rpane").forEach((p) => p.classList.toggle("hidden", p.id !== "rpane-" + which));
+}
+$$(".rtab").forEach((t) =>
+  t.addEventListener("click", () => showRPane(t.dataset.rtab, true)));
+
+function setRBadge(which, text, cls) {
+  const b = $("#rb-" + which);
+  if (!b) return;
+  b.textContent = text || "";
+  b.className = "rbadge" + (text ? " on" : "") + (cls ? " " + cls : "");
+}
+
+/* -- Panel 1 right: the season board, as a matrix ----------------------------
+   The left grid says WHO needs attention, one colour per participant. This says
+   WHAT is outstanding across the whole selection: participants down, up to four
+   seasons across, devices as dots inside each cell. Tick any set of cells and
+   the buttons act on exactly those (participant, season) pairs.
+
+   A participant starts in any month and completes a year, hence four slots. The
+   cell carries the REAL folder name for actions and the calendar label for
+   reading - those differ, sometimes only by a double space. */
+const SB_SEP = "\u0000";
+const seasonBoard = {
+  pids: [], boards: [], missing: [], req: 0,
+  picked: new Set(),          // "pid\0season folder name"
+  devices: new Set(),         // device names the buttons apply to
+  implemented: [], pending: [],
+};
+
+const SB_STATE = {
+  complete: { label: "processed",     cls: "ok" },
+  partial:  { label: "partial",       cls: "warn" },
+  pending:  { label: "not processed", cls: "todo" },
+  empty:    { label: "no data",       cls: "none" },
+  none:     { label: "no data",       cls: "none" },
+};
+const sbKey = (pid, season) => pid + SB_SEP + season;
+
+async function loadSeasonBoard(participants) {
+  const pids = participants || [];
+  seasonBoard.pids = pids;
+  if (!pids.length) { clearSeasonBoard("Select folders on the left to review their seasons."); return; }
+  const mine = ++seasonBoard.req;
+  $("#sb-summary").textContent = "reading " + pids.length + " folder(s)\u2026";
+  $("#seasonboard").innerHTML = '<div class="muted">loading\u2026</div>';
+  const r = await api("/api/panel1/season-boards", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ participants: pids }),
+  }).catch(() => ({ error: "request failed" }));
+  if (mine !== seasonBoard.req) return;            // a newer selection superseded this
+  if (r.error) { clearSeasonBoard(r.error); return; }
+  seasonBoard.boards = r.boards || [];
+  seasonBoard.missing = r.missing || [];
+  seasonBoard.implemented = r.devices_implemented || [];
+  seasonBoard.pending = r.devices_pending || [];
+  // keep ticks that still exist, so a reload after a run does not lose the place
+  const live = new Set();
+  seasonBoard.boards.forEach((b) => b.seasons.forEach((s) => live.add(sbKey(b.participant, s.season))));
+  seasonBoard.picked = new Set([...seasonBoard.picked].filter((k) => live.has(k)));
+  if (!seasonBoard.devices.size) seasonBoard.devices = new Set(seasonBoard.implemented);
+  renderSeasonBoard();
+}
+
+function clearSeasonBoard(msg) {
+  seasonBoard.pids = []; seasonBoard.boards = []; seasonBoard.missing = [];
+  seasonBoard.picked = new Set();
+  $("#sb-summary").textContent = msg;
+  $("#sb-head-right").innerHTML = "";
+  $("#seasonboard").innerHTML = "";
+  setRBadge("status", "");
+}
+
+/* Lay a participant's seasons into four slots by ordinal. A season whose
+   ordinal could not be derived takes the first free slot and says so. */
+function sbSlots(board) {
+  const slots = new Array(board.expected_seasons || 4).fill(null);
+  const extra = [];
+  const spill = [];
+  board.seasons.forEach((s) => {
+    const i = (s.n || 0) - 1;
+    if (i >= 0 && i < slots.length && !slots[i]) slots[i] = s;
+    else spill.push(s);
+  });
+  spill.forEach((s) => {
+    const i = slots.indexOf(null);
+    if (i >= 0) slots[i] = Object.assign({}, s, { unplaced: true });
+    else extra.push(s);
+  });
+  return { slots, extra };
+}
+
+function sbPairs() {
+  const out = [];
+  seasonBoard.boards.forEach((b) => b.seasons.forEach((s) => {
+    if (seasonBoard.picked.has(sbKey(b.participant, s.season))) out.push({ pid: b.participant, sn: s });
+  }));
+  return out;
+}
+
+/* What the chosen devices amount to over the ticked cells. */
+function sbRollup() {
+  const by = {};
+  sbPairs().forEach((p) => p.sn.devices.forEach((d) => {
+    if (!seasonBoard.devices.has(d.device)) return;
+    const r = by[d.device] || (by[d.device] = {
+      device: d.device, implemented: d.implemented,
+      inputs: 0, complete: 0, cells: 0, todo: 0, verdicts: {},
+    });
+    r.cells += 1; r.inputs += d.n_inputs || 0; r.complete += d.n_complete || 0;
+    if (d.has_input && d.state !== "complete") r.todo += 1;
+    (d.verdicts || []).filter(Boolean).forEach((v) => { r.verdicts[v] = (r.verdicts[v] || 0) + 1; });
+  }));
+  return Object.values(by).sort((a, b) => a.device.localeCompare(b.device));
+}
+
+function renderSeasonBoard() {
+  const host = $("#seasonboard");
+  host.innerHTML = "";
+  const boards = seasonBoard.boards;
+  if (!boards.length) {
+    $("#sb-summary").textContent = seasonBoard.missing.length
+      ? "No output folder for " + seasonBoard.missing.join(", ") + " yet."
+      : "Nothing to show for this selection.";
+    return;
+  }
+
+  // --- summary line ---------------------------------------------------------
+  let nSeasons = 0, nTodo = 0, nDone = 0, nMissing = 0;
+  boards.forEach((b) => {
+    nSeasons += b.seasons.length;
+    nMissing += Math.max(0, (b.expected_seasons || 4) - b.seasons.length);
+    b.seasons.forEach((s) => {
+      if (s.state === "complete") nDone += 1;
+      else if (s.state === "pending" || s.state === "partial") nTodo += 1;
+    });
+  });
+  $("#sb-summary").innerHTML =
+    "<b>" + boards.length + "</b> folder" + (boards.length === 1 ? "" : "s") +
+    " \u00b7 " + nSeasons + " season" + (nSeasons === 1 ? "" : "s") +
+    ' \u00b7 <span class="sb-ok">' + nDone + " processed</span>" +
+    (nTodo ? ' \u00b7 <span class="sb-todo">' + nTodo + " need processing</span>" : "") +
+    (nMissing ? ' \u00b7 <span class="sb-miss">' + nMissing + " not started</span>" : "");
+  setRBadge("status", nTodo ? String(nTodo) : "", nTodo ? "todo" : "");
+
+  $("#sb-head-right").innerHTML =
+    '<button class="btn ghost tiny" id="sb-need">tick all outstanding</button>' +
+    '<button class="btn ghost tiny" id="sb-clear">clear ticks</button>';
+
+  // --- the matrix -----------------------------------------------------------
+  const nSlots = boards[0].expected_seasons || 4;
+  const grid = el("div", "sbm");
+  grid.style.setProperty("--sb-cols", nSlots);
+
+  const head = el("div", "sbm-row head");
+  head.appendChild(el("div", "sbm-pid", "folder"));
+  for (let i = 0; i < nSlots; i++) {
+    const h = el("button", "sbm-col", "S" + (i + 1));
+    h.title = "Tick every " + ordinal(i + 1) + " season in this selection";
+    h.addEventListener("click", () => { toggleSlot(i); renderSeasonBoard(); });
+    head.appendChild(h);
+  }
+  grid.appendChild(head);
+
+  boards.forEach((b) => {
+    const row = el("div", "sbm-row");
+    const rh = el("button", "sbm-pid pick");
+    rh.textContent = b.suffix || b.participant;
+    rh.title = b.participant + " \u2014 tick every season this folder has";
+    rh.addEventListener("click", () => { toggleRow(b); renderSeasonBoard(); });
+    row.appendChild(rh);
+
+    const { slots, extra } = sbSlots(b);
+    slots.forEach((s, i) => {
+      if (!s) {
+        const ghost = el("div", "sbm-cell ghostslot");
+        ghost.innerHTML = '<span class="sbm-lab">\u2014</span><span class="sbm-sub">not started</span>';
+        ghost.title = "No " + ordinal(i + 1) + " season folder for " + b.participant + " yet";
+        row.appendChild(ghost);
+        return;
+      }
+      const st = SB_STATE[s.state] || SB_STATE.none;
+      const on = seasonBoard.picked.has(sbKey(b.participant, s.season));
+      const c = el("button", "sbm-cell " + st.cls + (on ? " picked" : ""));
+      const dots = s.devices.filter((d) => d.implemented).map((d) =>
+        '<i class="' + (SB_STATE[d.state] || SB_STATE.none).cls + '" title="' +
+        esc(d.device + ": " + (SB_STATE[d.state] || SB_STATE.none).label) + '"></i>').join("");
+      c.innerHTML =
+        '<span class="sbm-lab">' + esc(s.label) + (s.unplaced ? ' <b class="sbm-q">?</b>' : "") + "</span>" +
+        '<span class="sbm-sub">' + st.label + "</span>" +
+        '<span class="sbm-dots">' + dots + "</span>";
+      c.title = b.participant + " \u00b7 " + s.label + "\nfolder: " + s.season +
+        (s.basis ? "\nseason from " + s.basis : "") +
+        (s.unplaced ? "\nordinal could not be derived - slot is a guess" : "") + "\n" +
+        s.devices.filter((d) => d.implemented).map((d) =>
+          "  " + d.device + ": " + (SB_STATE[d.state] || SB_STATE.none).label +
+          (d.n_inputs ? " (" + d.n_complete + "/" + d.n_inputs + ")" : " (no input)")).join("\n");
+      c.addEventListener("click", () => {
+        const k = sbKey(b.participant, s.season);
+        if (seasonBoard.picked.has(k)) seasonBoard.picked.delete(k);
+        else seasonBoard.picked.add(k);
+        renderSeasonBoard();
+      });
+      row.appendChild(c);
+    });
+    grid.appendChild(row);
+    if (extra.length) {
+      const note = el("div", "sbm-extra",
+        esc(b.participant) + " has " + extra.length + " season folder(s) beyond four: " +
+        extra.map((s) => esc(s.label)).join(", "));
+      grid.appendChild(note);
+    }
+  });
+  host.appendChild(grid);
+
+  if (seasonBoard.missing.length) {
+    host.appendChild(el("div", "sbm-note",
+      "No output folder yet for " + esc(seasonBoard.missing.join(", ")) + "."));
+  }
+
+  host.appendChild(el("div", "sb-legend",
+    '<span><i class="lg ok"></i>processed</span>' +
+    '<span><i class="lg warn"></i>partial</span>' +
+    '<span><i class="lg todo"></i>not processed</span>' +
+    '<span><i class="lg none"></i>no data</span>' +
+    '<span class="sb-legend-hint">click a cell, a row name, or S1\u2013S4 to tick</span>'));
+
+  // --- devices + actions ----------------------------------------------------
+  const picked = sbPairs();
+  const foot = el("div", "sb-foot");
+
+  const chips = el("div", "sb-chips");
+  seasonBoard.implemented.forEach((dev) => {
+    const on = seasonBoard.devices.has(dev);
+    const b = el("button", "sb-chip" + (on ? " on" : ""), esc(dev));
+    b.title = (on ? "Applies to the buttons below" : "Ignored by the buttons below") +
+              " \u2014 click to toggle";
+    b.addEventListener("click", () => {
+      if (on) seasonBoard.devices.delete(dev); else seasonBoard.devices.add(dev);
+      renderSeasonBoard();
+    });
+    chips.appendChild(b);
+  });
+  seasonBoard.pending.forEach((dev) => {
+    const b = el("button", "sb-chip off", esc(dev));
+    b.disabled = true;
+    b.title = dev + " is not wired into the pipeline yet";
+    chips.appendChild(b);
+  });
+  foot.appendChild(chips);
+
+  const roll = sbRollup();
+  const tbl = el("div", "sb-roll");
+  if (!picked.length) {
+    tbl.innerHTML = '<div class="muted">Tick one or more seasons above to see what they contain.</div>';
+  } else if (!roll.length) {
+    tbl.innerHTML = '<div class="muted">No devices chosen \u2014 pick at least one above.</div>';
+  } else {
+    roll.forEach((r) => {
+      const verdicts = Object.keys(r.verdicts).sort().map((v) =>
+        '<span class="verdict ' + esc(v) + '">' + esc(v) +
+        (r.verdicts[v] > 1 ? " \u00d7" + r.verdicts[v] : "") + "</span>").join("");
+      const row = el("div", "sb-rollrow" + (r.todo ? " todo" : " ok"));
+      row.innerHTML =
+        "<b>" + esc(r.device) + "</b>" +
+        '<span class="sb-rollmeta">' +
+          (r.inputs ? r.complete + " / " + r.inputs + " file(s) processed" : "no input") +
+        "</span>" +
+        '<span class="sb-rollmeta">' +
+          (r.todo ? r.todo + " of " + r.cells + " season(s) outstanding" : "nothing outstanding") +
+        "</span>" +
+        '<span class="sb-verdicts">' + verdicts + "</span>";
+      tbl.appendChild(row);
+    });
+  }
+  foot.appendChild(tbl);
+
+  const acts = el("div", "sb-acts");
+  acts.innerHTML =
+    '<span class="sb-plan" id="sb-plan"></span>' +
+    '<span class="sb-spacer"></span>' +
+    '<button class="btn tiny" id="sb-process">Process</button>' +
+    '<button class="btn tiny warn" id="sb-reprocess">Reprocess</button>';
+  foot.appendChild(acts);
+  host.appendChild(foot);
+
+  $("#sb-need").addEventListener("click", () => {
+    seasonBoard.boards.forEach((b) => b.seasons.forEach((s) => {
+      if (s.state === "pending" || s.state === "partial") seasonBoard.picked.add(sbKey(b.participant, s.season));
+    }));
+    renderSeasonBoard();
+  });
+  $("#sb-clear").addEventListener("click", () => {
+    seasonBoard.picked = new Set();
+    renderSeasonBoard();
+  });
+  $("#sb-process", acts).addEventListener("click", () => startSeasonRun(false));
+  $("#sb-reprocess", acts).addEventListener("click", () => startSeasonRun(true));
+  updateSeasonActions();
+}
+
+function ordinal(n) {
+  return n + ({ 1: "st", 2: "nd", 3: "rd" }[n] || "th");
+}
+
+function toggleRow(board) {
+  const keys = board.seasons.map((s) => sbKey(board.participant, s.season));
+  const all = keys.length && keys.every((k) => seasonBoard.picked.has(k));
+  keys.forEach((k) => (all ? seasonBoard.picked.delete(k) : seasonBoard.picked.add(k)));
+}
+
+function toggleSlot(i) {
+  const keys = [];
+  seasonBoard.boards.forEach((b) => {
+    const s = sbSlots(b).slots[i];
+    if (s) keys.push(sbKey(b.participant, s.season));
+  });
+  const all = keys.length && keys.every((k) => seasonBoard.picked.has(k));
+  keys.forEach((k) => (all ? seasonBoard.picked.delete(k) : seasonBoard.picked.add(k)));
+}
+
+function updateSeasonActions() {
+  const plan = $("#sb-plan"), pb = $("#sb-process"), rb = $("#sb-reprocess");
+  if (!pb) return;
+  const picked = sbPairs();
+  const devices = [...seasonBoard.devices];
+  if (!picked.length || !devices.length) {
+    plan.textContent = picked.length ? "pick a device" : "tick a season";
+    pb.disabled = true; rb.disabled = true;
+    return;
+  }
+  const todo = sbRollup().reduce((n, r) => n + r.todo, 0);
+  const folders = new Set(picked.map((p) => p.pid)).size;
+  pb.disabled = todo === 0;
+  rb.disabled = false;
+  plan.textContent = picked.length + " season(s) in " + folders + " folder(s) \u00b7 " +
+    (todo ? todo + " outstanding" : "all processed");
+}
+
+async function startSeasonRun(force) {
+  const picked = sbPairs();
+  const devices = [...seasonBoard.devices];
+  if (!picked.length || !devices.length) return;
+  if (!currentInitials()) {
+    logLine("Enter your initials (2-4 letters) before a run that writes data.", "warning");
+    $("#initials").focus(); $("#initials").classList.add("need");
+    return;
+  }
+  if (realJobActive) {
+    logLine("Pipeline busy \u2014 a run is already in progress.", "warning");
+    return;
+  }
+
+  // one scope entry per participant: season folder names are not comparable
+  // between participants, so the server takes them per participant
+  const byPid = new Map();
+  picked.forEach((p) => {
+    if (!byPid.has(p.pid)) byPid.set(p.pid, []);
+    byPid.get(p.pid).push(p.sn.season);     // the REAL folder name, not the label
+  });
+  const scope = [...byPid].map(([participant, seasons]) => ({ participant, seasons }));
+  const label = scope.length === 1
+    ? scope[0].participant + " \u00b7 " + picked.map((p) => p.sn.label).join(", ")
+    : picked.length + " seasons \u00b7 " + scope.length + " folders";
+
+  if (force) {
+    const ok = window.confirm(
+      "Reprocess " + devices.join(", ") + " for " + label + "?\n\n" +
+      "Everything for those devices is redone, including items already complete. " +
+      "Each Actigraph recording is re-downloaded from OneDrive (~1 GB) and re-epoched.");
+    if (!ok) return;
+  }
+
+  $("#log-run").innerHTML = "";
+  $("#progress-list").innerHTML = "";
+  progressCards = {}; currentLabel = null; killTimer();
+  currentRunMode = force ? "force" : "new";
+  setJobStatus((force ? "REPROCESS" : "RUN") + " \u00b7 " + picked.length + " season(s)",
+               "running mode-" + currentRunMode);
+  logLine((force ? "FORCE REPROCESS" : "RUN") + ": " + label + " \u00b7 " + devices.join(", "),
+          force ? "warning" : "ok");
+  if (!rPaneManual) showRPane("progress");
+
+  const resp = await api("/api/run", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      participants: scope.map((s) => s.participant),
+      scope,
+      devices,
+      force, dry_run: false,
+      initials: currentInitials(),
+    }),
+  }).catch(() => ({ error: "request failed" }));
+  if (resp.error) { logLine("Error: " + resp.error, "error"); return; }
+  realJobActive = true;
+  currentJobId = resp.job_id;
+  openJobSocket(resp.job_id, false);
+}
+
 
 async function loadSourceTree(participant) {
   $("#fb-participant").textContent = "· " + participant;
@@ -691,6 +1109,7 @@ function setJobStatus(text, cls) {
 
 function openJobSocket(jobId, dryRun) {
   setJobStatus(RUN_MODES[currentRunMode].tag, `running mode-${currentRunMode}`);
+  if (!rPaneManual) showRPane("progress");   // the pane worth watching, while it runs
   const ws = new WebSocket(`ws://${location.host}/ws/jobs/${jobId}`);
   ws.onmessage = (ev) => handleEvent(JSON.parse(ev.data));
   ws.onclose = () => { if (!dryRun) realJobActive = false; };
@@ -779,7 +1198,10 @@ function handleEvent(e) {
       setJobStatus(`${RUN_MODES[currentRunMode].tag} · ${e.status}`,
                    `${e.status === "done" ? "done" : "error"} mode-${currentRunMode}`);
       logLine(`■ ${e.dry_run ? "dry run" : "job"} ${e.status}${e.error ? ": " + e.error : ""}`, e.status === "done" ? "ok" : "warning");
-      if (!e.dry_run) runGrid.reload();   // cells that finished turn white
+      if (!e.dry_run) {
+        runGrid.reload();                 // cells that finished turn white
+        if (seasonBoard.pids.length) loadSeasonBoard(seasonBoard.pids);  // and so does the board
+      }
       break;
   }
 }
@@ -787,8 +1209,8 @@ function handleEvent(e) {
 // ================================================================== PANEL 2
 const viewGrid = new GridController("#grid-view", "#sel-count-view", (sel) => {
   clearDetail();   // selection changed — drop any report shown for the old folder
-  if (sel.length === 1) loadDrilldown(sel[0]);
-  else { $("#device-row").innerHTML = ""; $("#measures").innerHTML = `<div class="muted">Select one folder, then pick a device below.</div>`; }
+  loadRecordings(sel);
+  loadCoverage(sel);
 }).setUrl("/api/panel2/grid-stream");
 
 $("#clear-view").addEventListener("click", () => viewGrid.clear());
@@ -860,45 +1282,258 @@ function renderAggregate(a) {
   $("#agg").innerHTML = "";
   $("#agg").appendChild(box);
 
-  // Make every recording in the selection pickable for Step 2 drill-down
-  // (so a single-folder selection is not required).
-  populateDrilldownFromItems(a.items);
+  // The recording tree is driven by the selection, not by AGGREGATE, so it is
+  // already populated - nothing to do here.
 }
 
-function populateDrilldownFromItems(items) {
-  clearDetail();
-  const row = $("#device-row");
-  row.innerHTML = "";
-  if (!items || !items.length) {
-    $("#measures").innerHTML = `<div class="muted">no processed recordings in the selection</div>`;
+/* -- Panel 2 left: recordings, grouped ---------------------------------------
+   These were one flat row of buttons labelled "CD011 . Autumn 2025" - every
+   participant, season and device in the selection mixed into a single strip.
+   The study is organised participant -> season -> device, so this is too. */
+const recTree = { participants: [], open: new Set(), picked: null, req: 0 };
+
+async function loadRecordings(participants) {
+  const host = $("#rectree");
+  recTree.picked = null;
+  if (!participants.length) {
+    recTree.participants = [];
+    $("#mv-title").textContent = "";
+    host.innerHTML = '<div class="muted">Select folders on the left to list their recordings.</div>';
+    $("#measures").innerHTML = '<div class="muted">Pick a recording above to see its Step 2 measures.</div>';
     return;
   }
-  $("#mv-title").textContent = `· ${items.length} recording(s)`;
-  items.forEach((it) => {
-    const b = el("button", "btn", `${it.participant} · ${it.season}`);
-    b.addEventListener("click", () => showMeasures(it.participant, it));
-    row.appendChild(b);
-  });
-  $("#measures").innerHTML = `<div class="muted">pick a recording above to see its Step 2 measures</div>`;
+  const mine = ++recTree.req;
+  host.innerHTML = '<div class="muted">loading\u2026</div>';
+  const rows = await Promise.all(participants.map((pid) =>
+    api("/api/participant/" + encodeURIComponent(pid) + "/output-items")
+      .then((d) => ({ participant: pid, items: d.items || [] }))
+      .catch(() => ({ participant: pid, items: [] }))));
+  if (mine !== recTree.req) return;
+  recTree.participants = rows;
+  // open a single participant by default; keep many collapsed so the list
+  // stays scannable
+  recTree.open = new Set(rows.length === 1 ? [rows[0].participant] : []);
+  renderRecordings();
 }
 
-// ---- drilldown: pick folder -> device -> measures
-let drillItems = [];
-async function loadDrilldown(participant) {
-  clearDetail();
-  $("#mv-title").textContent = "· " + participant;
-  $("#measures").innerHTML = `<div class="muted">loading…</div>`;
-  const data = await api(`/api/participant/${encodeURIComponent(participant)}/output-items`);
-  drillItems = data.items || [];
-  const row = $("#device-row");
-  row.innerHTML = "";
-  if (!drillItems.length) { $("#measures").innerHTML = `<div class="muted">no processed items for ${participant}</div>`; return; }
-  drillItems.forEach((it, i) => {
-    const b = el("button", "btn", `${it.season} · ${it.device}`);
-    b.addEventListener("click", () => showMeasures(participant, it));
-    row.appendChild(b);
+function groupBySeason(items) {
+  const by = new Map();
+  items.forEach((it) => {
+    if (!by.has(it.season)) by.set(it.season, []);
+    by.get(it.season).push(it);
   });
-  $("#measures").innerHTML = `<div class="muted">pick a season · device above</div>`;
+  return [...by.entries()].map(([season, list]) => ({ season, items: list }));
+}
+
+function renderRecordings() {
+  const host = $("#rectree");
+  host.innerHTML = "";
+  const rows = recTree.participants;
+  const total = rows.reduce((n, r) => n + r.items.length, 0);
+  $("#mv-title").textContent = "\u00b7 " + total + " recording(s) in " + rows.length + " folder(s)";
+  if (!total) {
+    host.innerHTML = '<div class="muted">Nothing processed in this selection yet.</div>';
+    return;
+  }
+  rows.forEach((row) => {
+    const open = recTree.open.has(row.participant);
+    const block = el("div", "rec-p" + (open ? " open" : ""));
+    const head = el("button", "rec-phead");
+    head.innerHTML = '<span class="rec-caret">' + (open ? "\u25be" : "\u25b8") + "</span>" +
+      "<b>" + esc(row.participant) + "</b>" +
+      '<span class="rec-meta">' + row.items.length + " recording(s) \u00b7 " +
+      groupBySeason(row.items).length + " season(s)</span>";
+    head.addEventListener("click", () => {
+      if (open) recTree.open.delete(row.participant);
+      else recTree.open.add(row.participant);
+      renderRecordings();
+    });
+    block.appendChild(head);
+    if (open) {
+      groupBySeason(row.items).forEach((grp) => {
+        const sb = el("div", "rec-s");
+        sb.appendChild(el("div", "rec-shead", esc(grp.season)));
+        const devs = el("div", "rec-devs");
+        grp.items.forEach((it) => {
+          const v = it.verdict || "";
+          const on = recTree.picked && recTree.picked.stem === it.stem &&
+                     recTree.picked.season === it.season && recTree.picked.device === it.device;
+          const b = el("button", "rec-dev" + (on ? " picked" : ""));
+          b.innerHTML = "<b>" + esc(it.device) + "</b>" +
+            (v ? '<span class="verdict ' + esc(v) + '">' + esc(v) + "</span>" : "") +
+            '<span class="rec-days">' +
+              (it.valid_days != null ? it.valid_days + "/" + it.total_days + " valid days" : "") +
+            "</span>";
+          b.title = it.stem;
+          b.addEventListener("click", () => {
+            recTree.picked = it;
+            renderRecordings();
+            showMeasures(row.participant, it);
+          });
+          devs.appendChild(b);
+        });
+        sb.appendChild(devs);
+        block.appendChild(sb);
+      });
+    }
+    host.appendChild(block);
+  });
+}
+
+$("#rec-expand").addEventListener("click", () => {
+  recTree.participants.forEach((r) => recTree.open.add(r.participant));
+  renderRecordings();
+});
+$("#rec-collapse").addEventListener("click", () => {
+  recTree.open = new Set();
+  renderRecordings();
+});
+
+/* -- Panel 2 right: Summary / Coverage --------------------------------------- */
+$$(".rtab[data-vtab]").forEach((t) => t.addEventListener("click", () => {
+  $$(".rtab[data-vtab]").forEach((x) => x.classList.toggle("active", x === t));
+  $$("#vpane-summary, #vpane-coverage").forEach((p) =>
+    p.classList.toggle("hidden", p.id !== "vpane-" + t.dataset.vtab));
+}));
+$("#cov-surveys").addEventListener("change", () => loadCoverage(viewGrid.list()));
+
+/* Coverage answers the question Panel 1 cannot: two devices can both be
+   complete and still cover different weeks, and a survey labelled "S3" has to
+   actually belong to the participant's third season before any cross-device
+   dataset is believable. */
+let covReq = 0;
+
+async function loadCoverage(participants) {
+  const host = $("#coverage");
+  if (!participants.length) {
+    $("#cov-summary").textContent = "Select folders to see how their devices line up.";
+    $("#cov-pill").textContent = "";
+    setVBadge("");
+    host.innerHTML = "";
+    return;
+  }
+  const mine = ++covReq;
+  host.innerHTML = '<div class="muted">reading dates\u2026</div>';
+  const withSurveys = $("#cov-surveys").checked;
+  const data = await api("/api/panel2/coverage", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ participants, surveys: withSurveys }),
+  }).catch(() => ({ error: "request failed" }));
+  if (mine !== covReq) return;
+  if (data.error) { host.innerHTML = '<div class="muted">' + esc(data.error) + "</div>"; return; }
+  renderPanel2Coverage(data, withSurveys);
+}
+
+function setVBadge(text, cls) {
+  const b = $("#vb-coverage");
+  b.textContent = text || "";
+  b.className = "rbadge" + (text ? " on" : "") + (cls ? " " + cls : "");
+}
+
+function agreementClass(a) {
+  if (a == null) return "none";
+  if (a >= 0.9) return "ok";
+  if (a >= 0.7) return "warn";
+  return "bad";
+}
+
+function renderPanel2Coverage(data, withSurveys) {
+  const host = $("#coverage");
+  host.innerHTML = "";
+  const rows = data.participants || [];
+  let nSeasons = 0, worst = null, unproven = 0;
+  rows.forEach((r) => r.seasons.forEach((s) => {
+    nSeasons += 1;
+    if (s.agreement != null && (worst == null || s.agreement < worst)) worst = s.agreement;
+  }));
+  rows.forEach((r) => (r.surveys || []).forEach((a) => { if (!a.agrees) unproven += 1; }));
+
+  $("#cov-summary").innerHTML =
+    "<b>" + rows.length + "</b> folder" + (rows.length === 1 ? "" : "s") +
+    " \u00b7 " + nSeasons + " season" + (nSeasons === 1 ? "" : "s") + " with data" +
+    (worst != null ? ' \u00b7 lowest device agreement <span class="cov-' +
+      agreementClass(worst) + '">' + Math.round(worst * 100) + "%</span>" : "");
+  $("#cov-pill").textContent = (data.shared_seasons || []).length + " shared season(s)";
+  setVBadge(unproven ? String(unproven) : "", "warn");
+
+  // --- seasons the selection has in common ---------------------------------
+  if ((data.shared_seasons || []).length) {
+    const sh = el("div", "cov-shared");
+    sh.appendChild(el("div", "cov-h", "Seasons in common"));
+    const strip = el("div", "cov-strip");
+    data.shared_seasons.forEach((e) => {
+      const chip = el("div", "cov-chip");
+      chip.innerHTML = "<b>" + esc(e.label) + "</b>" +
+        '<span class="cov-chipmeta">' + e.participants.length + " folder(s)</span>" +
+        '<span class="cov-dots">' + e.devices.map((d) =>
+          '<i title="' + esc(d.device + ": " + d.participants + " folder(s), " + d.days + " day-records") + '">' +
+          esc(d.device.slice(0, 3)) + "</i>").join("") + "</span>";
+      chip.title = e.participants.join(", ");
+      strip.appendChild(chip);
+    });
+    sh.appendChild(strip);
+    host.appendChild(sh);
+  }
+
+  // --- per participant, per season ------------------------------------------
+  rows.forEach((r) => {
+    const block = el("div", "cov-p");
+    block.appendChild(el("div", "cov-h", esc(r.participant)));
+    if (!r.seasons.length) {
+      block.appendChild(el("div", "muted",
+        "No processed recordings" + ((r.surveys || []).length ? " \u2014 survey responses only" : "")));
+    }
+    r.seasons.forEach((s) => {
+      const card = el("div", "cov-season " + agreementClass(s.agreement));
+      const span = s.first && s.last ? s.first + " \u2192 " + s.last : "no dated days";
+      card.innerHTML =
+        '<div class="cov-stop">' +
+          '<span class="cov-n">S' + (s.n == null ? "?" : s.n) + "</span>" +
+          '<b class="cov-lab">' + esc(s.label) + "</b>" +
+          '<span class="cov-span">' + esc(span) + "</span>" +
+          '<span class="cov-agree">' +
+            (s.agreement == null ? "\u2014"
+              : Math.round(s.agreement * 100) + "% agree \u00b7 " + s.shared_days +
+                "/" + s.union_days + " days") +
+          "</span>" +
+        "</div>";
+      const bars = el("div", "p2-bars");
+      s.devices.forEach((d) => {
+        const pct = s.union_days ? Math.round((d.days / s.union_days) * 100) : 0;
+        const bar = el("div", "p2-bar");
+        bar.innerHTML =
+          '<span class="p2-dev">' + esc(d.device) + "</span>" +
+          '<span class="p2-track"><i style="width:' + pct + '%"></i></span>' +
+          '<span class="p2-meta">' + (d.days ? d.days + " days \u00b7 " + esc(d.first || "") + " \u2192 " + esc(d.last || "") : "no dated days") + "</span>";
+        bar.title = d.device + ": " + d.recordings + " recording(s)" +
+          (d.verdicts && d.verdicts.length ? " \u00b7 " + d.verdicts.join(", ") : "");
+        bars.appendChild(bar);
+      });
+      card.appendChild(bars);
+      if (s.pairs && s.pairs.length > 1) {
+        card.appendChild(el("div", "cov-pairs", s.pairs.map((p) =>
+          esc(p.a) + "\u2229" + esc(p.b) + " " + p.shared_days + "d").join("  \u00b7  ")));
+      }
+      block.appendChild(card);
+    });
+
+    if (withSurveys && (r.surveys || []).length) {
+      const sv = el("div", "cov-surveys");
+      sv.appendChild(el("div", "cov-sub", "Survey responses \u2014 does S<n> mean the n-th season?"));
+      r.surveys.forEach((a) => {
+        const line = el("div", "cov-srow " + (a.agrees ? "ok" : "bad"));
+        line.innerHTML =
+          '<span class="cov-sname">' + esc(a.survey) + "</span>" +
+          '<span class="cov-sord">S' + a.ordinal + "</span>" +
+          '<span class="cov-sdate">' + esc(a.recorded || "no date") + "</span>" +
+          '<span class="cov-starget">' + esc(a.master_season || "\u2014") + "</span>" +
+          '<span class="cov-sverdict">' + (a.agrees ? "matches" : esc(a.note)) + "</span>";
+        sv.appendChild(line);
+      });
+      block.appendChild(sv);
+    }
+    host.appendChild(block);
+  });
 }
 
 async function showMeasures(participant, it) {

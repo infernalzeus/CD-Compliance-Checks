@@ -26,5 +26,9 @@ Thumbs.db
 .idea/
 launcher-log.txt
 
-# Claude Code local session config (per-machine, not part of the program)
+# local agent session config (per-machine, not part of the program)
 .claude/
+
+# Local-only working material: plans, drafts, scratch notes, anything that is
+# about building the tool rather than part of it. Plans do not go on GitHub.
+_local/

@@ -219,4 +219,4 @@ writes is Export.
    `manifest.json` (approver, inclusion, thresholds, tool commits, SHA-256 of
    every input) into `<t2_root>/T2-<ts>-<initials>-<seasons>/`.
 
-Full phase notes: [`t2-plan.md`](t2-plan.md).
+Full phase notes: `_local/plans/t2-plan.md` (local only - plans are not committed).

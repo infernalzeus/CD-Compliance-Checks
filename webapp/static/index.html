@@ -105,23 +105,53 @@
       <div class="sel-count" id="sel-count-run">0 selected</div>
     </div>
 
+    <!-- One column, four views. Stacked boxes meant scrolling past three
+         things to read the fourth; the tab labels keep the hidden ones'
+         counts visible so nothing is lost by not looking at them. -->
     <section class="right">
-      <div class="panel-head"><h2>Progress</h2>
+      <div class="panel-head">
+        <h2>Review &amp; act</h2>
         <div class="head-right">
           <span id="job-status" class="pill"></span>
           <button class="btn ghost danger" id="stop-btn" style="display:none">■ STOP</button>
         </div>
       </div>
-      <div class="progress-list" id="progress-list"></div>
-      <div class="flagbox">
-        <div class="filebox-head">Naming check <span id="flag-scope"></span></div>
+
+      <div class="rtabs" role="tablist">
+        <button class="rtab active" data-rtab="status" role="tab" title="Season and device status for everything selected, with the buttons that act on it">Status<span class="rbadge" id="rb-status"></span></button>
+        <button class="rtab" data-rtab="progress" role="tab" title="What the running job is doing, item by item">Progress<span class="rbadge" id="rb-progress"></span></button>
+        <button class="rtab" data-rtab="naming" role="tab" title="Naming problems in the selected folders' input files">Naming<span class="rbadge" id="rb-naming"></span></button>
+        <button class="rtab" data-rtab="files" role="tab" title="The staging files behind one selected folder">Files<span class="rbadge" id="rb-files"></span></button>
+      </div>
+
+      <!-- Status: what is outstanding across the WHOLE selection, broken down
+           the way the study runs - participants down, up to four seasons
+           across. The left grid answers "who needs attention"; this answers
+           "what exactly, and act on it". -->
+      <div class="rpane" id="rpane-status">
+        <div class="sb-bar">
+          <span class="sb-sum" id="sb-summary">Select folders on the left to review their seasons.</span>
+          <span class="sb-head-right" id="sb-head-right"></span>
+        </div>
+        <div class="seasonboard" id="seasonboard"></div>
+        <span id="sb-participant" hidden></span>
+      </div>
+
+      <div class="rpane hidden" id="rpane-progress">
+        <div class="progress-list" id="progress-list"></div>
+      </div>
+
+      <div class="rpane hidden" id="rpane-naming">
+        <div class="pane-sub">Naming check <span id="flag-scope"></span></div>
         <div class="flaglist" id="flaglist"><div class="muted">Select folders to see naming issues in their input files.</div></div>
       </div>
-      <div class="filebox">
-        <div class="filebox-head">WT OneDrive <span id="fb-participant"></span></div>
+
+      <div class="rpane hidden" id="rpane-files">
+        <div class="pane-sub">WT OneDrive staging <span id="fb-participant"></span></div>
         <div class="filetree" id="filetree"><div class="muted">Select a single cell to view its staging files.</div></div>
       </div>
     </section>
+
   </main>
 
   <!-- ============================ PANEL 2 ============================ -->
@@ -140,10 +170,20 @@
         <span><i class="sw red"></i> none compliant</span>
         <span><i class="sw empty"></i> none processed</span>
       </div>
+      <!-- Recordings, grouped the way the study is organised: participant,
+           then season, then device. They used to be one flat row of buttons
+           labelled "CD011 . Autumn 2025", which mixed all three together. -->
       <div class="filebox">
-        <div class="filebox-head">Step 2 measures <span id="mv-title"></span></div>
-        <div class="measures" id="measures"><div class="muted">Select one folder, then pick a device below.</div></div>
-        <div class="device-row" id="device-row"></div>
+        <div class="filebox-head recbox-head">
+          <span>Recordings <span id="mv-title"></span></span>
+          <span class="rec-tools">
+            <button class="btn ghost tiny" id="rec-expand">expand all</button>
+            <button class="btn ghost tiny" id="rec-collapse">collapse</button>
+          </span>
+        </div>
+        <div class="rectree" id="rectree"><div class="muted">Select folders on the left to list their recordings.</div></div>
+        <div class="device-row" id="device-row" hidden></div>
+        <div class="measures" id="measures"><div class="muted">Pick a recording above to see its Step 2 measures.</div></div>
       </div>
     </section>
 
@@ -153,9 +193,28 @@
       <button class="btn run t2send" id="t2-send-btn" title="Check cross-device availability and send the selected folders to T2">SEND TO<br />T2 →</button>
     </div>
 
+    <!-- Panel 1 asks "is it processed". Panel 2 asks "does it line up" - two
+         devices can both be complete and still cover different weeks, and a
+         survey labelled S3 has to actually belong to the third season. -->
     <section class="right">
-      <div class="panel-head"><h2>Combined compliance</h2></div>
-      <div class="agg" id="agg"><div class="muted">Select processed folders and press AGGREGATE.</div></div>
+      <div class="panel-head">
+        <h2>Dataset view</h2>
+        <div class="head-right"><span class="pill" id="cov-pill"></span></div>
+      </div>
+      <div class="rtabs" role="tablist">
+        <button class="rtab active" data-vtab="summary" role="tab" title="Combined compliance across the selection">Summary</button>
+        <button class="rtab" data-vtab="coverage" role="tab" title="Which devices cover which days, and how far they agree">Coverage<span class="rbadge" id="vb-coverage"></span></button>
+      </div>
+      <div class="rpane" id="vpane-summary">
+        <div class="agg" id="agg"><div class="muted">Select processed folders and press AGGREGATE.</div></div>
+      </div>
+      <div class="rpane hidden" id="vpane-coverage">
+        <div class="cov-topbar">
+          <span class="cov-sum" id="cov-summary">Select folders to see how their devices line up.</span>
+          <label class="chk" title="Read the Qualtrics archive and check each response falls in the season its filename claims"><input type="checkbox" id="cov-surveys" /> include surveys</label>
+        </div>
+        <div class="coverage" id="coverage"></div>
+      </div>
     </section>
 
     <section class="detail" id="detail-panel">

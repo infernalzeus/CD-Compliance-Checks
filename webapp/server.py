@@ -39,7 +39,8 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse  # n
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 from cdcompliance import batches, manifest, naming, results, updates, variants  # noqa: E402
-from cdcompliance import pseudo_id, t2_data, t2_selections, tools, user_settings  # noqa: E402
+from cdcompliance import (coverage, pseudo_id, qualtrics_intake, t2_data,  # noqa: E402
+                          t2_selections, tools, user_settings)
 from cdcompliance.config import load_config  # noqa: E402
 from cdcompliance.devices import all_devices, implemented_devices  # noqa: E402
 from webapp.jobs import JobManager  # noqa: E402
@@ -375,6 +376,139 @@ def api_source_tree(pid: str) -> JSONResponse:
     return JSONResponse(results.source_tree(_config, pid))
 
 
+@app.get("/api/participant/{pid}/season-board")
+def api_season_board(pid: str) -> JSONResponse:
+    """Per-season, per-device status for one participant (Panel 1, right side).
+
+    Read-only and metadata-only. Each season carries both its real folder name
+    (what actions must use) and its calendar label (what people read).
+    """
+    try:
+        return JSONResponse(manifest.season_board(_config, pid))
+    except FileNotFoundError:
+        return JSONResponse({"error": "participant folder not found"}, status_code=404)
+
+
+# ---------------------------------------------------------------- Qualtrics
+# Qualtrics is the one source whose delivery shape is inverted: one export
+# covers every participant for one survey and one ordinal season, in a central
+# archive of dated upload batches. It is fanned out into the per-participant
+# tree before discovery ever sees it, and its completeness is a CONTENT check,
+# not an existence check - see cdcompliance/qualtrics_intake.py.
+
+
+@app.post("/api/panel2/coverage")
+def api_panel2_coverage(payload: dict) -> JSONResponse:
+    """Who has what, when: per season, per device, with the days they share.
+
+    Read-only. Panel 2's question is not "is it processed" but "does it line
+    up" - two devices can both be complete and still cover different weeks.
+    """
+    pids = [str(x).strip() for x in (payload.get("participants") or []) if str(x).strip()]
+    if not pids:
+        return JSONResponse({"error": "no folders selected"}, status_code=400)
+    if len(pids) > 80:
+        return JSONResponse({"error": "too many folders selected to review at once (max 80)"},
+                            status_code=400)
+    devices = [str(d).lower() for d in (payload.get("devices") or []) if str(d).strip()] or None
+    return JSONResponse(coverage.selection_coverage(
+        _config, pids, devices, with_surveys=bool(payload.get("surveys"))))
+
+
+@app.get("/api/qualtrics/scan")
+def api_qualtrics_scan() -> JSONResponse:
+    """What the archive holds. Filenames only - no file is opened.
+
+    That matters: the archive lives on OneDrive, where opening a file hydrates
+    it. Counting and warning costs nothing; reading is a separate step.
+    """
+    found = qualtrics_intake.scan(_config)
+    by_survey: dict[str, dict] = {}
+    for e in found.exports:
+        entry = by_survey.setdefault(e.survey, {"survey": e.survey, "exports": 0,
+                                                "seasons": [], "batches": set()})
+        entry["exports"] += 1
+        entry["batches"].add(e.batch)
+        if e.season and e.season not in entry["seasons"]:
+            entry["seasons"].append(e.season)
+    surveys = []
+    for entry in by_survey.values():
+        surveys.append({**entry, "seasons": sorted(entry["seasons"]),
+                        "batches": len(entry["batches"])})
+    surveys.sort(key=lambda x: x["survey"])
+    return JSONResponse({
+        "root": str(qualtrics_intake.archive_root(_config)),
+        "exists": qualtrics_intake.archive_root(_config).exists(),
+        "exports": len(found.exports),
+        "batches": len({e.batch for e in found.exports}),
+        "surveys": surveys,
+        "warnings": qualtrics_intake.warnings(found),
+    })
+
+
+@app.get("/api/participant/{pid}/qualtrics")
+def api_qualtrics_status(pid: str) -> JSONResponse:
+    """Content check for one participant: what the archive offers vs what is filed."""
+    return JSONResponse(qualtrics_intake.content_check(_config, pid))
+
+
+@app.post("/api/qualtrics/preview")
+def api_qualtrics_preview(payload: dict) -> JSONResponse:
+    """A dry run: reads the archive, writes nothing, reports what it would do."""
+    pids = [str(x).strip() for x in (payload.get("participants") or []) if str(x).strip()]
+    out = qualtrics_intake.assimilate(_config, participants=pids or None,
+                                      surveys=payload.get("surveys") or None,
+                                      dry_run=True)
+    out["files"] = [{k: v for k, v in f.items() if k != "path"} | {"path": str(f["path"])}
+                    for f in out["files"]]
+    return JSONResponse(out)
+
+
+@app.post("/api/qualtrics/assimilate")
+def api_qualtrics_assimilate(payload: dict) -> JSONResponse:
+    """Fan the archive out into master. The only Qualtrics call that writes."""
+    pids = [str(x).strip() for x in (payload.get("participants") or []) if str(x).strip()]
+    initials = batches.normalise_initials(payload.get("initials"))
+    if initials is None:
+        return JSONResponse({"error": "initials required (2-4 letters) for a run that writes data"},
+                            status_code=400)
+    user_settings.set_text("initials", initials)
+    _persist_settings()
+    out = qualtrics_intake.assimilate(_config, participants=pids or None,
+                                      surveys=payload.get("surveys") or None,
+                                      dry_run=False)
+    out["files"] = [{k: v for k, v in f.items() if k != "path"} | {"path": str(f["path"])}
+                    for f in out["files"]]
+    out["initials"] = initials
+    return JSONResponse(out)
+
+
+@app.post("/api/panel1/season-boards")
+def api_season_boards(payload: dict) -> JSONResponse:
+    """Season/device status for SEVERAL participants at once (Panel 1, right).
+
+    Read-only and metadata-only, like the single-participant board. Reviewing a
+    whole selection is the normal case - one participant is just a selection of
+    one - so the matrix in the UI is driven entirely by this.
+    """
+    pids = [str(p).strip() for p in (payload.get("participants") or []) if str(p).strip()]
+    if not pids:
+        return JSONResponse({"error": "no participants selected"}, status_code=400)
+    if len(pids) > 80:
+        return JSONResponse({"error": "too many folders selected to review at once (max 80)"},
+                            status_code=400)
+    boards, missing = [], []
+    for pid in pids:
+        try:
+            boards.append(manifest.season_board(_config, pid))
+        except FileNotFoundError:
+            missing.append(pid)
+    return JSONResponse({"boards": boards, "missing": missing, "expected_seasons": 4,
+                         "devices_implemented": implemented_devices(),
+                         "devices_pending": [d for d in all_devices()
+                                             if d not in implemented_devices()]})
+
+
 @app.post("/api/run")
 async def api_run(payload: dict) -> JSONResponse:
     participants = [p for p in payload.get("participants", []) if p]
@@ -382,6 +516,37 @@ async def api_run(payload: dict) -> JSONResponse:
     dry_run = bool(payload.get("dry_run", False))
     if not participants:
         return JSONResponse({"error": "no participants selected"}, status_code=400)
+    # Optional scope. Absent => the whole participant, exactly as before, so the
+    # existing RUN button is untouched. `seasons` are real folder names;
+    # discovery matches them whitespace/case-insensitively.
+    seasons = [str(x) for x in (payload.get("seasons") or []) if str(x).strip()] or None
+    devices = [str(d).lower() for d in (payload.get("devices") or []) if str(d).strip()] or None
+    if devices:
+        unknown = sorted(set(devices) - set(implemented_devices()))
+        if unknown:
+            return JSONResponse(
+                {"error": "not an implemented device: " + ", ".join(unknown)}, status_code=400)
+    # A selection spanning participants carries one season list per participant,
+    # because season folder names are not comparable between them.
+    season_map: dict[str, list[str]] = {}
+    for entry in payload.get("scope") or []:
+        pid = str((entry or {}).get("participant") or "").strip()
+        wanted = [str(x) for x in ((entry or {}).get("seasons") or []) if str(x).strip()]
+        if pid and wanted:
+            season_map.setdefault(pid, []).extend(wanted)
+    if season_map:
+        unknown = sorted(set(season_map) - set(participants))
+        if unknown:
+            return JSONResponse(
+                {"error": "scope names folders that are not selected: " + ", ".join(unknown)},
+                status_code=400)
+        if seasons:
+            return JSONResponse({"error": "send either seasons or scope, not both"},
+                                status_code=400)
+    elif seasons and len(participants) != 1:
+        return JSONResponse(
+            {"error": "a season-scoped run covers one participant at a time; "
+                      "send per-participant scope instead"}, status_code=400)
     # Any run that writes data is a recorded batch and must say who ran it.
     initials = batches.normalise_initials(payload.get("initials"))
     if not dry_run and initials is None:
@@ -390,7 +555,8 @@ async def api_run(payload: dict) -> JSONResponse:
     if initials:
         user_settings.set_text("initials", initials)   # remembered for this user
         _persist_settings()
-    job = _jobs.submit(participants, force, dry_run, initials or "")
+    job = _jobs.submit(participants, force, dry_run, initials or "",
+                       seasons=seasons, devices=devices, season_map=season_map or None)
     return JSONResponse({"job_id": job.id, "job": job.info()})
 
 

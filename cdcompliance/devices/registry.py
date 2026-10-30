@@ -10,19 +10,22 @@ from __future__ import annotations
 from .actigraph import ActigraphProcessor
 from .expiwell import ExpiwellProcessor
 from .mieye import MiEyeProcessor
+from .qualtrics import QualtricsProcessor
 from .base import DeviceProcessor, NotImplementedDevice
 
 # Folder names as they appear inside each season directory.
 _PENDING = {
     "saliva": "Saliva",
     "cognitron": "Cognitron",
-    "qualtrics": "Qualtrics",
 }
 
 _REGISTRY: dict[str, DeviceProcessor] = {
     "actigraph": ActigraphProcessor(),
     "mieye": MiEyeProcessor(),
     "expiwell": ExpiwellProcessor(),
+    # Qualtrics discovers sideways, from the central archive rather than from
+    # the season folder it is handed. See devices/qualtrics.py.
+    "qualtrics": QualtricsProcessor(),
 }
 for _key, _folder in _PENDING.items():
     _REGISTRY[_key] = NotImplementedDevice(_key, _folder)

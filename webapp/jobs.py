@@ -39,6 +39,14 @@ class Job:
         #: "run" = staging -> master. "recompute" = Step 1 variant beside a recording.
         self.kind = kind
         self.payload = payload or {}
+        #: Optional scope for a run. None => every season / every implemented
+        #: device, which is what the whole-participant RUN button sends.
+        self.seasons: Optional[list[str]] = None
+        self.devices: Optional[list[str]] = None
+        #: Per-participant season scope, for a selection spanning participants.
+        #: Season folder names are not comparable across participants, so a flat
+        #: `seasons` list can only ever describe one of them.
+        self.season_map: Optional[dict[str, list[str]]] = None
         self.batch_id: Optional[str] = None
         self.recorder = None      # BatchRecorder for real runs
         self.status = "queued"  # queued | running | done | error | cancelled
@@ -57,6 +65,8 @@ class Job:
             "id": self.id,
             "kind": self.kind,
             "participants": self.participants,
+            "seasons": self.seasons,
+            "devices": self.devices,
             "force": self.force,
             "dry_run": self.dry_run,
             "status": self.status,
@@ -80,8 +90,13 @@ class JobManager:
 
     # -- public API ----------------------------------------------------------
     def submit(self, participants: list[str], force: bool, dry_run: bool = False,
-               initials: str = "") -> Job:
+               initials: str = "", seasons: Optional[list[str]] = None,
+               devices: Optional[list[str]] = None,
+               season_map: Optional[dict[str, list[str]]] = None) -> Job:
         job = Job(uuid.uuid4().hex[:12], participants, force, dry_run, initials)
+        job.seasons = seasons or None
+        job.devices = devices or None
+        job.season_map = season_map or None
         self.jobs[job.id] = job
         if dry_run:
             # Dry runs are read-only and fast — run immediately in their own
@@ -193,6 +208,9 @@ class JobManager:
             {
                 "type": "job_start",
                 "participants": job.participants,
+                "seasons": job.seasons,
+                "season_map": job.season_map,
+                "devices": job.devices,
                 "force": job.force,
                 "dry_run": job.dry_run,
             },
@@ -217,11 +235,14 @@ class JobManager:
                 break
             selection = ResolvedSelection(
                 participant=pid,
-                seasons=None,
-                # Run every implemented check (matches the grid, which is coloured
-                # by all-device completeness). Already-complete items are skipped,
-                # and a device with no input for this participant is a no-op.
-                devices=implemented_devices(),
+                # None => every season, which is what the whole-participant RUN
+                # sends. A season-scoped run passes real folder names; discovery
+                # matches them whitespace/case-insensitively.
+                seasons=(job.season_map or {}).get(pid, job.seasons),
+                # Default: every implemented check (matches the grid, which is
+                # coloured by all-device completeness). Already-complete items are
+                # skipped, and a device with no input is a no-op.
+                devices=job.devices or implemented_devices(),
                 copy_bin=self.config.copy_bin,
                 dry_run=job.dry_run,
                 force=job.force,
