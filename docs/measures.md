@@ -1,6 +1,6 @@
 # CHiP-D measures · what each one is, how it is calculated, and what decides compliance
 
-A tabulated expansion of [`cd-compliance-pipeline.canvas`](cd-compliance-pipeline.canvas).
+A tabulated expansion of [`Data Control Pipeline.proposed.canvas`](Data%20Control%20Pipeline.proposed.canvas).
 Every formula and every threshold below was read out of the code, not out of the
 papers — the reference is given so the two can be checked against each other.
 

@@ -45,6 +45,10 @@ class ToolsConfig:
     luminosity_repo: Path
     # Local repo dir of the Expiwell ESM tool (expiwell-metrics).
     expiwell_repo: Path
+    # Local repo dir of the Qualtrics survey tool (qualtrics-preprocessing).
+    # Cloned and update-checked like the others; the dashboard's own intake
+    # works without it, and uses it for cleaning when it is present.
+    qualtrics_repo: Path
     # Interpreter used to launch the tools. Must have numpy/pandas/scipy/
     # matplotlib (and each tool's deps) importable.
     python_executable: str = "python"
@@ -53,6 +57,9 @@ class ToolsConfig:
     sleep_metrics_repo_url: str = "https://github.com/infernalzeus/actigraphy-sleep-metrics.git"
     luminosity_repo_url: str = "https://github.com/infernalzeus/luminosity-metrics.git"
     expiwell_repo_url: str = "https://github.com/infernalzeus/expiwell-metrics.git"
+    #: Private while the survey team reviews it - setup_tools will prompt for
+    #: credentials until they make it public.
+    qualtrics_repo_url: str = "https://github.com/mdavudova22/chipd-qualtrics-pipeline.git"
 
 
 #: Default T2 location for the CHiP-D team; each user can change it in the ⚙ panel.
@@ -264,6 +271,7 @@ def load_config(config_path: Path) -> Config:
         sleep_metrics_repo=_as_path(tools_raw.get("sleep_metrics_repo") or (parent / "actigraphy-sleep-metrics"), base),
         luminosity_repo=_as_path(tools_raw.get("luminosity_repo") or (parent / "luminosity-metrics"), base),
         expiwell_repo=_as_path(tools_raw.get("expiwell_repo") or (parent / "expiwell-metrics"), base),
+        qualtrics_repo=_as_path(tools_raw.get("qualtrics_repo") or (parent / "qualtrics-preprocessing"), base),
         # Default to the interpreter running the app (sys.executable) so the tools
         # use the same Python/venv — avoids "python not found" on macOS/Linux where
         # only `python3` exists. Override in config to pin a specific env.
@@ -282,6 +290,10 @@ def load_config(config_path: Path) -> Config:
         luminosity_repo_url=tools_raw.get(
             "luminosity_repo_url",
             "https://github.com/infernalzeus/luminosity-metrics.git",
+        ),
+        qualtrics_repo_url=tools_raw.get(
+            "qualtrics_repo_url",
+            "https://github.com/mdavudova22/chipd-qualtrics-pipeline.git",
         ),
     )
     compliance = ComplianceConfig(

@@ -34,12 +34,14 @@ _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect  # noqa: E402
+from fastapi import FastAPI, Response, WebSocket, WebSocketDisconnect  # noqa: E402
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 
 from cdcompliance import batches, manifest, naming, results, updates, variants  # noqa: E402
-from cdcompliance import (coverage, pseudo_id, qualtrics_intake, t2_data,  # noqa: E402
+from cdcompliance import (coverage, presets, pseudo_id,  # noqa: E402
+                          qualtrics_intake, report,
+                          t2_data,
                           t2_selections, tools, user_settings)
 from cdcompliance.config import load_config  # noqa: E402
 from cdcompliance.devices import all_devices, implemented_devices  # noqa: E402
@@ -481,6 +483,59 @@ def api_qualtrics_assimilate(payload: dict) -> JSONResponse:
                     for f in out["files"]]
     out["initials"] = initials
     return JSONResponse(out)
+
+
+@app.get("/api/t2/presets")
+def api_t2_presets() -> JSONResponse:
+    """Saved topic selections: devices + variables, never participants."""
+    try:
+        return JSONResponse({"presets": presets.load()})
+    except Exception as exc:
+        return JSONResponse({"error": f"{type(exc).__name__}: {exc}", "presets": []})
+
+
+@app.post("/api/report/compliance")
+def api_report_compliance(payload: dict) -> JSONResponse:
+    """Build a compliance report over a selection, or over one batch.
+
+    Reports name participants, so they are written to ``runs/_private/reports/``
+    - the git-ignored side, beside the unstripped batch detail. The public
+    ``runs/batches/`` records are never touched.
+    """
+    pids = [str(x).strip() for x in (payload.get("participants") or []) if str(x).strip()]
+    batch_id = str(payload.get("batch_id") or "").strip() or None
+    if batch_id and not pids:
+        # Scope to the batch: its participants live on the private record only.
+        detail = batches.read_private(_config, batch_id) or {}
+        pids = list(detail.get("participants") or [])
+    if not pids:
+        return JSONResponse({"error": "no folders selected"}, status_code=400)
+    devices = [str(d).lower() for d in (payload.get("devices") or []) if str(d).strip()] or None
+    built = report.build(_config, pids, devices=devices, batch_id=batch_id,
+                         title=str(payload.get("title") or ""))
+    saved = report.save(_config, built)
+    return JSONResponse({**saved, "report": {k: v for k, v in built.items()
+                                             if k not in ("rows", "naming")},
+                         "n_rows": len(built["rows"]),
+                         "n_flags": len(built["naming"]["flags"])})
+
+
+@app.get("/api/report/{name}")
+def api_report_file(name: str, kind: str = "html") -> Response:
+    """Serve a built report back. Path-checked: only this folder, only these kinds."""
+    suffix = {"html": ".html", "xlsx": ".xlsx", "json": ".json"}.get(kind)
+    if suffix is None:
+        return JSONResponse({"error": "unknown report kind"}, status_code=400)
+    base = report.reports_dir(_config).resolve()
+    path = (base / f"{report.slug(name)}{suffix}").resolve()
+    if base not in path.parents or not path.exists():
+        return JSONResponse({"error": "report not found"}, status_code=404)
+    media = {"html": "text/html; charset=utf-8",
+             "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+             "json": "application/json"}[kind]
+    headers = ({"Content-Disposition": f'attachment; filename="{path.name}"'}
+               if kind != "html" else {})
+    return Response(path.read_bytes(), media_type=media, headers=headers)
 
 
 @app.post("/api/panel1/season-boards")

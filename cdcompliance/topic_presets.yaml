@@ -1,0 +1,117 @@
+# Topic presets — saved T2 selections, one per standing-dataset topic.
+#
+# A preset is devices + variables + a name. **Participants are never in here**:
+# who goes into a dataset is chosen fresh each time, and recorded on the export.
+# Seasons are not here either, because season folders belong to a participant.
+#
+# Topics are named by their research question, not by the researcher: this file
+# is in a public repository.
+#
+# `missing` lists what the topic asks for that the dictionary cannot supply yet.
+# It is shown in the dialog, so nobody exports a dataset believing it is
+# complete. Remove entries from it as the variables land.
+
+version: 1
+
+presets:
+  - id: circadian-misalignment
+    name: Circadian misalignment
+    question: >
+      Phase angle difference between the actigraphy sleep midpoint and a
+      circadian marker, with the diary midpoint as an exploratory comparison.
+    devices: [actigraph, expiwell]
+    variables:
+      - act_m10_hour
+      - act_l5_hour
+      - act_is
+      - act_iv
+      - act_sri
+      - act_pct_sleep
+      - diary_tib
+      - diary_tst
+      - diary_quality
+    missing:
+      - sleep midpoint from actigraphy
+      - sleep midpoint from the diary
+      - phase angle difference (derived across devices)
+      - melatonin per day — no intake exists
+
+  - id: sleep-duration-and-anxiety
+    name: Sleep duration and anxiety
+    question: >
+      Bidirectional relationship between sleep duration and anxiety, with
+      chronotype as a moderator and daily cognition alongside.
+    devices: [actigraph, expiwell, qualtrics]
+    variables:
+      - act_sri
+      - act_sri_days
+      - act_pct_sleep
+      - act_is
+      - act_iv
+      - act_wear_hours
+      - act_pct_compliance
+      - diary_tst
+      - diary_sol
+      - diary_waso
+      - diary_awakenings
+      - diary_se
+      - diary_tib
+      - diary_quality
+      - diary_restedness
+      - affect_positive
+      - affect_negative
+      - esm_response_rate
+    missing:
+      - actigraphy TST, SOL, WASO, SE as dictionary variables
+      - PANAS, GAD-7, ERS, MEQ, CCQ — in master as raw rows, not yet scored variables
+      - Cognitron reaction time and accuracy — no intake exists
+
+  - id: seasonal-light-and-shift-work
+    name: Seasonal light exposure and shift work
+    question: >
+      Differences in daily light exposure between standard and non-standard
+      schedules across the photoperiod, and how that tracks with sleep.
+    devices: [actigraph, mieye, expiwell, qualtrics]
+    variables:
+      - light_mel_mean
+      - light_mel_median
+      - light_mel_max
+      - light_day_mean
+      - light_night_mean
+      - light_tat_min
+      - light_tbt_min
+      - light_m5_onset
+      - light_m5_level
+      - light_m7_onset
+      - light_m7_level
+      - light_l2_onset
+      - light_l2_level
+      - light_hours
+      - light_pct_compliance
+      - act_sri
+      - act_is
+      - act_iv
+      - act_m10_hour
+      - act_m10_activity
+      - act_l5_hour
+      - act_l5_activity
+      - act_pct_sleep
+      - diary_tst
+      - diary_sol
+      - diary_waso
+      - diary_se
+    missing:
+      - melanopic EDI — MiEYE melanopic illuminance is not mEDI
+      - cumulative daily dose, light regularity index
+      - light M10 / L5 and RA — M5 / M7 / L2 are different windows
+      - IS / IV on light
+      - temperature from the GENEActiv recording
+      - MEQ and CCQ as scored variables
+      - shift schedule — no source identified
+
+  - id: everything-available
+    name: Everything currently available
+    question: Every variable the dictionary can supply, for exploration.
+    devices: [actigraph, mieye, expiwell, qualtrics]
+    variables: []        # empty means "all variables for the chosen devices"
+    missing: []

@@ -1,0 +1,764 @@
+{
+  "nodes": [
+    {
+      "id": "grp-dash",
+      "type": "group",
+      "x": -174,
+      "y": 448,
+      "width": 4966,
+      "height": 3015,
+      "label": "Data Control Pipeline"
+    },
+    {
+      "id": "9206a2c433e00d25",
+      "type": "group",
+      "x": -80,
+      "y": 521,
+      "width": 2854,
+      "height": 2899,
+      "label": "CD Data Procedure"
+    },
+    {
+      "id": "99360c6e66b3b031",
+      "type": "group",
+      "x": 3280,
+      "y": 821,
+      "width": 1422,
+      "height": 1885,
+      "label": "Dashboard"
+    },
+    {
+      "id": "lane-xpw",
+      "type": "group",
+      "x": -66,
+      "y": 2455,
+      "width": 2813,
+      "height": 940,
+      "label": "EXPIWELL  · Experience Sampling "
+    },
+    {
+      "id": "lane-act",
+      "type": "group",
+      "x": -57,
+      "y": 568,
+      "width": 2811,
+      "height": 890,
+      "label": "GeneActiv · Actigraphy"
+    },
+    {
+      "id": "lane-mi",
+      "type": "group",
+      "x": -62,
+      "y": 1512,
+      "width": 2813,
+      "height": 886,
+      "label": "MiEYE  ·  Luminosity"
+    },
+    {
+      "id": "sc-act",
+      "type": "group",
+      "x": 747,
+      "y": 658,
+      "width": 1337,
+      "height": 767,
+      "label": "Step 2 ·  Metrics"
+    },
+    {
+      "id": "lane-todo",
+      "type": "group",
+      "x": -103,
+      "y": 3540,
+      "width": 1921,
+      "height": 300,
+      "label": "NOT IMPLEMENTED YET"
+    },
+    {
+      "id": "sc-xpw",
+      "type": "group",
+      "x": 746,
+      "y": 2517,
+      "width": 600,
+      "height": 851,
+      "label": "What each ESM score means"
+    },
+    {
+      "id": "sc-mi",
+      "type": "group",
+      "x": 743,
+      "y": 1570,
+      "width": 600,
+      "height": 800,
+      "label": "What each light score means"
+    },
+    {
+      "id": "t-saliva",
+      "type": "text",
+      "text": "## Saliva\n- cortisol / melatonin assays\n- format \n  - also batched by upload date\n    each sheet is a saliva slide (multiple participants, 4x3 samples)\n  - participant sheet required\n    ",
+      "x": -43,
+      "y": 3557,
+      "width": 520,
+      "height": 273
+    },
+    {
+      "id": "t-batch",
+      "type": "text",
+      "text": "## Cognitron\n- exported **batched by upload date**, not per participant → needs the same\n  fan-out Qualtrics now has\n- no inputs seen in staging yet\n\n_Qualtrics was here; it is implemented — see the lane below._",
+      "x": 597,
+      "y": 3564,
+      "width": 791,
+      "height": 226
+    },
+    {
+      "id": "d3275e6eab9349d0",
+      "type": "text",
+      "text": "## Collate\n\n`CDxxx\\<Season>\\<Device>\\`\n",
+      "x": 388,
+      "y": 3906,
+      "width": 511,
+      "height": 228
+    },
+    {
+      "id": "x-affect",
+      "type": "text",
+      "text": "### Affect — mood in the moment\n- **positive / negative affect** — the mean of the pleasant and the unpleasant items (1–7)\n- several responses a day, each with its own timestamp",
+      "x": 786,
+      "y": 3137,
+      "width": 520,
+      "height": 190,
+      "color": "4"
+    },
+    {
+      "id": "x-s1",
+      "type": "text",
+      "text": "## Schedule + scoring\n**In:** survey CSVs   **Out:** per-response and per-night values\n\n- the **expected** number of prompts has to be configured — the file cannot say what was missed\n- every response keeps its **real timestamp**: day-of-study is not a calendar count",
+      "x": -45,
+      "y": 2847,
+      "width": 520,
+      "height": 280,
+      "color": "4"
+    },
+    {
+      "id": "x-diary",
+      "type": "text",
+      "text": "### Sleep diary — the reported night\n- **TST** total sleep time · **SOL** time to fall asleep · **WASO** awake during the night · **SE** sleep efficiency\n\n`TST = (lights out → final wake) − SOL − WASO`\n`SE  = TST ÷ time in bed`\n\n- filled in the morning, so it describes **the night before**",
+      "x": 786,
+      "y": 2827,
+      "width": 520,
+      "height": 270,
+      "color": "4"
+    },
+    {
+      "id": "x-out",
+      "type": "text",
+      "text": "## What it writes\n- `_expiwell_metrics.csv` — response rate per survey\n- `_expiwell_sleep_metrics.csv` — one row per night\n- `_expiwell_affect.csv` — one row per response\n- `_expiwell_item_series.csv` / `_item_measures.csv` — item level\n- `_expiwell_report.pdf` · `_compliance.json`",
+      "x": 1474,
+      "y": 2803,
+      "width": 520,
+      "height": 280
+    },
+    {
+      "id": "x-comp",
+      "type": "text",
+      "text": "## Compliance · enough answers?\n- pooled response rate across the **scored** surveys\n- **PASS** ≥ 70 % · **REVIEW** within 10 points · else **FAIL**",
+      "x": 2096,
+      "y": 2845,
+      "width": 520,
+      "height": 200,
+      "color": "2"
+    },
+    {
+      "id": "x-src",
+      "type": "text",
+      "text": "## Raw · Expiwell\n- one CSV per survey: Affect, Sleep-Diary, Cognitron prompt, …\n- 4 header rows before the data starts\n- **only completed responses are exported** — misses are invisible in the file",
+      "x": -43,
+      "y": 2551,
+      "width": 520,
+      "height": 220
+    },
+    {
+      "id": "x-adh",
+      "type": "text",
+      "text": "### Adherence\n- **response rate** — how much of the protocol was actually answered\n\n`response rate = completed prompts ÷ expected prompts`\n\n- also: median delay before answering, and % answered inside the prompt window",
+      "x": 786,
+      "y": 2547,
+      "width": 520,
+      "height": 249,
+      "color": "4"
+    },
+    {
+      "id": "m-dose",
+      "type": "text",
+      "text": "### Dose over the study\n- **daily dose** — total melanopic exposure per day\n- **time in zones** — how long spent dark / dim / bright\n- **hourly dark histogram** — which hours of the day were dark",
+      "x": 782,
+      "y": 2120,
+      "width": 520,
+      "height": 220,
+      "color": "4"
+    },
+    {
+      "id": "m-comp",
+      "type": "text",
+      "text": "## Compliance · worn, in daylight?\n- the device is **charged regularly, so charging ≠ wearing**\n- the test is the **shape of the day**:\n  - day:night melanopic ratio **≥ 2**\n  - **and** ≥ 10 h above the light floor\n- **verdict** — PASS ≥ 3 valid days · REVIEW within 1 · else FAIL",
+      "x": 1524,
+      "y": 2052,
+      "width": 520,
+      "height": 280,
+      "color": "2"
+    },
+    {
+      "id": "m-s1",
+      "type": "text",
+      "text": "## Light processing\n**In:** the logged sheet   **Out:** per-day metrics + report\n\n- works in **melanopic EDI** — the part of light the body clock responds to\n- kept on a **log scale**: indoors ≈ 100 lx, daylight ≈ 100 000 lx",
+      "x": -9,
+      "y": 1985,
+      "width": 520,
+      "height": 260,
+      "color": "4"
+    },
+    {
+      "id": "m-when",
+      "type": "text",
+      "text": "### When the light falls\n- **M5 / M7** — the **brightest** 5 h and 7 h: onset hour + level\n- **L2** — the **darkest** 2 h: onset hour + level\n- these are the hours compared against the Actigraph rest window, to see whether light and sleep line up",
+      "x": 783,
+      "y": 1866,
+      "width": 520,
+      "height": 240,
+      "color": "4"
+    },
+    {
+      "id": "m-amount",
+      "type": "text",
+      "text": "### How much light\n- **day mean / night mean** — average melanopic EDI \n- **TAT 250** — minutes at or above **250 lx** during the day \n  *(daytime target)*\n- **TBT 10** — minutes below **10 lx** at night *(the darkness target)*\n- **geometric mean** — the average of log₁₀(light), because the scale spans 5 orders of magnitude",
+      "x": 783,
+      "y": 1584,
+      "width": 520,
+      "height": 260,
+      "color": "4"
+    },
+    {
+      "id": "m-src",
+      "type": "text",
+      "text": "## Raw · MiEYE\n\n- per-epoch spectral channels (melanopic, rhodopic, photopic, cones) + motion + charger",
+      "x": -10,
+      "y": 1712,
+      "width": 520,
+      "height": 153
+    },
+    {
+      "id": "m-out",
+      "type": "text",
+      "text": "## What it writes\n- `_luminosity_metrics.csv` — per-day light metrics\n- `_light_windows.csv` — M5 / M7 / L2 per day\n- `_hourly_dark_histogram.csv`\n- `_luminosity_report.pdf` — heatmaps, zones, daily dose\n- `_compliance.json` · `_daily_compliance.csv`",
+      "x": 1524,
+      "y": 1622,
+      "width": 520,
+      "height": 280
+    },
+    {
+      "id": "a-sri",
+      "type": "text",
+      "text": "### SRI — same time of day, same state?\n- every minute is scored **sleep or wake** (Cole–Kripke 1992, step 2's published constants)\n- then: at the same clock minute on the next day, was it the same state?\n\n`SRI = 2 × (% of day-to-day minute pairs that match) − 100`\n\n- **100 = perfectly repeating · 0 = coin toss**\n- the sleep/wake call uses a fixed cut-off, so it is sensitive to any rescaling of activity",
+      "x": 775,
+      "y": 1151,
+      "width": 684,
+      "height": 253,
+      "color": "4"
+    },
+    {
+      "id": "a-s1",
+      "type": "text",
+      "text": "## Step 1 · Epoching\n**In:** raw `.bin`   **Out:** one row per **60 s** → `_60s.csv`\n\n- **SVM** — how much movement in that minute, with gravity taken out\n  `SVM = Σ over the minute of | length of the 3-axis vector − 1 g |`\n  *a perfectly still device reads ≈ 0*\n- **axis means** — which way the device was facing\n- **axis SDs** — how much it shook (used later to spot non-wear)",
+      "x": -6,
+      "y": 970,
+      "width": 520,
+      "height": 320,
+      "color": "4"
+    },
+    {
+      "id": "a-ra",
+      "type": "text",
+      "text": "### RA — strength of the rhythm\n- the contrast between the active and the resting part of the day, on a 0–1 scale\n- **higher = a sharper day/night difference**\n\n`RA = (M10 − L5) ÷ (M10 + L5)`",
+      "x": 1533,
+      "y": 1075,
+      "width": 519,
+      "height": 230,
+      "color": "4"
+    },
+    {
+      "id": "a-per",
+      "type": "text",
+      "text": "### Periodogram — is there a ~24 h cycle at all?\n- tries every period from **14 h to 34 h** and reports which fits best\n- a healthy rhythm peaks at ≈ 24 h\n\n`strength(P) = variance explained by folding the data at period P ÷ total variance`",
+      "x": 778,
+      "y": 883,
+      "width": 539,
+      "height": 251,
+      "color": "4"
+    },
+    {
+      "id": "a-m10",
+      "type": "text",
+      "text": "### M10 · L5 — when the day peaks and rests\n- **M10** = mean activity over the **most active 10 hours**\n- **L5** = mean activity over the **least active 5 hours**\n- each gives a **level** (how much) and an **onset hour** (when it starts)\n- measured noon → noon, so a night is never split across two days\n\n`M10 = highest 10-hour rolling mean of hourly activity`\n`L5  = lowest 5-hour rolling mean of hourly activity`",
+      "x": 1527,
+      "y": 740,
+      "width": 532,
+      "height": 303,
+      "color": "4"
+    },
+    {
+      "id": "a-src",
+      "type": "text",
+      "text": "## Raw · Actigraph\n- GENEActiv `.bin`, worn on the wrist\n- 3 axes sampled at **100 Hz** (~8.6 M readings a day)\n- ~1.1 GB, usually a cloud placeholder → downloaded first\n- one recording per participant-season",
+      "x": -8,
+      "y": 598,
+      "width": 520,
+      "height": 220
+    },
+    {
+      "id": "a-isiv",
+      "type": "text",
+      "text": "### IS · IV — how regular, how broken\n- **IS** (interdaily stability) — do the days look alike? **0 = random, 1 = identical days**\n  `IS = variance of the average 24-hour day ÷ variance of all hours`\n- **IV** (intradaily variability) — how much it jumps hour to hour; **higher = more fragmented**\n  `IV = mean squared change between neighbouring hours ÷ variance of all hours`",
+      "x": 778,
+      "y": 686,
+      "width": 698,
+      "height": 178,
+      "color": "4"
+    },
+    {
+      "id": "a-out",
+      "type": "text",
+      "text": "## Step 2 · what it writes\n**In:** `_60s.csv`   **Out:** per recording\n\n- `_60s_nonparametric.csv` — IS, IV, M10, L5 (one row)\n- `_60s_daily.csv` — M10 / L5 **for each day**\n- `_60s_sri.csv` — SRI + how many days it used\n- `_60s_periodogram.csv` — period vs strength\n- `_60s_report.pdf` — the plots a reviewer actually looks at",
+      "x": 2206,
+      "y": 651,
+      "width": 520,
+      "height": 320
+    },
+    {
+      "id": "a-comp",
+      "type": "text",
+      "text": "## Compliance · was it worn?\n**In:** the 60-s epochs   **Out:** one verdict\n\n- **non-wear** — 2 of 3 axis SDs below **13 mg** for **≥ 30 min** *(a worn wrist always twitches)*\n- **valid day** — ≥ **10 h** wear **and** an hourly activity range ≥ 20 *(a real day/night swing)*\n- **verdict** — **PASS** ≥ 3 valid days · **REVIEW** within 1 · else **FAIL**\n- writes `_compliance.json` · `_daily_compliance.csv` · `.xlsx`",
+      "x": 2206,
+      "y": 1056,
+      "width": 520,
+      "height": 340,
+      "color": "2"
+    },
+    {
+      "id": "doc",
+      "type": "text",
+      "text": "## Season paperwork\n- the **assessment log** from staging, copied as-is\n- says what was *meant* to happen: visit number, device start dates, agreed bed/wake times\n- maps **Day 1–15 of ESM to real dates**",
+      "x": 2022,
+      "y": -147,
+      "width": 700,
+      "height": 200,
+      "color": "3"
+    },
+    {
+      "id": "master",
+      "type": "text",
+      "text": "# Pre-Processed Data - master folder\n`…\\CDxxx\\<Season>\\<Device>\\`\n\n**Collated per participant × season × device**\n\n- every device writes a `_compliance.json` **in the same shape** → one verdict table across devices\n- the day-level CSVs sit beside it, so values can be re-read **without re-running anything**\n- the season folder also holds the assessment log\n- per participant: `CDxxx_compliance_summary.csv/.xlsx`",
+      "x": 3088,
+      "y": -230,
+      "width": 560,
+      "height": 358,
+      "color": "5"
+    },
+    {
+      "id": "d-vis",
+      "type": "text",
+      "text": "## ② Visualise (tab)\n\nPer participant\n- passed / review / failed and mean % compliance,\n  by device and season\n- drill into per participant recording (all CSVs, PDFs)\n\n**proposed · built**\n- recordings grouped **participant → season → device**\n- **Coverage** tab: which days each device actually covers, how far they\n  agree, and whether a survey labelled S‹n› really falls in season ‹n›\n",
+      "x": 3318,
+      "y": 1258,
+      "width": 560,
+      "height": 220,
+      "color": "5"
+    },
+    {
+      "id": "d-run",
+      "type": "text",
+      "text": "## ① Compliance (tab)\n**In:** staging   **Out:**  master \n\n- ⚑ Name Check — file skip/misattributions issues - UNPROCESSED\n- **RUN**: Preview Data, New Batch, Reprocess\n\t- authenticated\n- live progress per step, cancellable\n\n**proposed · built**\n- right column is tabbed: Status · Progress · Naming · Files\n- **Status** is a matrix — folders down, up to four seasons across,\n  devices as dots. Tick any set of cells; Process / Reprocess act on\n  exactly those (participant, season, device)\n",
+      "x": 3321,
+      "y": 863,
+      "width": 560,
+      "height": 240,
+      "color": "2"
+    },
+    {
+      "id": "sharepoint",
+      "type": "text",
+      "text": "# Raw data · Staging \n`Tier 1\\staging\\CDxxx\\<Season>\\<Device>\\`\nSharePoint / OneDrive\n- uploaded by the research team: **one folder per participant, per season**\n- **read-only** — the pipeline never writes back here\n",
+      "x": -1067,
+      "y": 1906,
+      "width": 637,
+      "height": 204,
+      "color": "6"
+    },
+    {
+      "id": "d-t2",
+      "type": "text",
+      "text": "## ③ T2 (tab) \nIn day-level CSVs for the chosen participants, seasons and devices;\nMeasures are lined up across and then evaluated for study feasibility:\n- **Coverage** — appropriate overlap for all worn devices' timelines (plot)\n- **Agreement** — two measures in same participant (plot)\n- **Relationships** — within one person's own days vs between different people\n- **Compare** — by season of the year, by group, or by person\n\n",
+      "x": 3318,
+      "y": 1858,
+      "width": 560,
+      "height": 353,
+      "color": "5"
+    },
+    {
+      "id": "runs",
+      "type": "text",
+      "text": "## runs/ — the record of what was done\n- **batches/** — public, stripped: who, when, mode, counts, thresholds, tool versions\n- **_private/** — participants and per-item results, stays on the machine",
+      "x": 4158,
+      "y": 1258,
+      "width": 480,
+      "height": 320,
+      "color": "3"
+    },
+    {
+      "id": "recompute",
+      "type": "text",
+      "text": "## Recompute \n- some thresholds live **inside** the numbers: light floor, non-wear rule, epoch length\n- changing one means re-process\n\nStep 1 Built\n- Epoch Size, Bandpass filter",
+      "x": 3361,
+      "y": 2439,
+      "width": 480,
+      "height": 244,
+      "color": "1"
+    },
+    {
+      "id": "d-exp",
+      "type": "text",
+      "text": "## ④ Export — Tier 2 Research Cohorts\n- lists every file **before** writing, then takes the **approver's initials**\n\n**Out:** `<t2_root>\\T2-<date>-<initials>-<seasons>\\`\n- tidy data + one row per participant-day\n- dictionary of every measure\n- charts PDF + the device report PDFs\n- **manifest** — thresholds used, tool versions, SHA-256 of every input file",
+      "x": 4863,
+      "y": 1879,
+      "width": 560,
+      "height": 305,
+      "color": "4"
+    },
+    {
+      "id": "2fc83728b2c5402f",
+      "x": 1400,
+      "y": 4048,
+      "width": 707,
+      "height": 428,
+      "type": "file",
+      "file": "Agenda.md"
+    },
+    {
+      "id": "lane-qual",
+      "type": "group",
+      "label": "QUALTRICS · Surveys  (proposed · built)",
+      "x": -66,
+      "y": 4600,
+      "width": 2813,
+      "height": 940,
+      "color": "4"
+    },
+    {
+      "id": "q-src",
+      "type": "text",
+      "x": -43,
+      "y": 4690,
+      "width": 520,
+      "height": 300,
+      "color": "6",
+      "text": "## Raw · Qualtrics — the archive\n`Tier 1\\staging\\Data Archive\\Qualtrics\\`\n\n**The shape is inverted.** Every other device is one file per\nparticipant per season. Here one export covers **every participant**\nfor one survey and one ordinal season, inside a dated upload batch.\n\n- 23 batch folders · 112 exports · all filenames parse\n- read-only — never written back to"
+    },
+    {
+      "id": "q-fan",
+      "type": "text",
+      "x": 600,
+      "y": 4670,
+      "width": 600,
+      "height": 360,
+      "color": "4",
+      "text": "## Assimilate · the fan-out\n**In:** every export   **Out:** per participant, per season\n\n- reads **every batch**, not the newest — one participant's season can\n  arrive split across uploads\n- identity is `ResponseId`; a response seen twice is kept once\n- duplicates resolved: finished → furthest progress → latest recorded\n- **S‹n› → the participant's own calendar season folder**, checked\n  against the response date (19/19 agreed across the study)\n- preview responses dropped\n- adds `season` and `source_file` so every row says where it came from"
+    },
+    {
+      "id": "q-clean",
+      "type": "text",
+      "x": 1320,
+      "y": 4670,
+      "width": 600,
+      "height": 330,
+      "color": "4",
+      "text": "## Clean · `qualtrics-preprocessing`\n**In:** the raw per-season CSV   **Out:** `_clean.csv`\n\nThe survey team's own rules, imported from their repo:\n- drop preview responses and the Qualtrics plumbing columns\n- keep the named item list per survey, rename to readable headings\n\n**Why it runs second.** Cleaning **drops `ResponseId`** — the key the\nmerge needs. So the clean file is *derived*, rebuilt from the raw file\neach time, never appended to.\n\n_Repo not cloned → raw only; nothing fails._"
+    },
+    {
+      "id": "q-comp",
+      "type": "text",
+      "x": 600,
+      "y": 5100,
+      "width": 600,
+      "height": 280,
+      "color": "4",
+      "text": "## Compliance · did they finish it?\n- **PASS** submitted · **REVIEW** abandoned part-way\n- nothing is scored from the answers — that is analysis\n\n**The one content check in the pipeline.** Everywhere else, *is it\nprocessed?* is answered by whether a named file exists. A Qualtrics\nseason file is never finished — a later batch can add a response to a\nseason written weeks ago — so completeness compares the response ids\nthe archive offers against the ids already filed."
+    },
+    {
+      "id": "q-out",
+      "type": "text",
+      "x": 2040,
+      "y": 4670,
+      "width": 560,
+      "height": 330,
+      "color": "5",
+      "text": "## What it writes\n`<Season>\\Qualtrics\\`\n- `<survey>.csv` — raw, **accumulates**\n- `<survey>_clean.csv` — derived, rebuilt\n- `<survey>_compliance.json` — same shape as every other device\n\n**Once-only surveys** (enrolment, clinical) have no season of their\nown, so they are filed in the participant's **first** season — which is\nwhen they were collected.\n\nSurveys: seasonal · retrospective · enrolment · clinical enrolment ·\nclinical screening"
+    },
+    {
+      "id": "q-note",
+      "type": "text",
+      "x": 1320,
+      "y": 5100,
+      "width": 600,
+      "height": 280,
+      "color": "3",
+      "text": "### Still open\n- the repo's GitHub URL is not set yet — it is registered and cloned\n  like the other tool repos the moment it is\n- the seasonal cleaning keeps **PHQ-9, GAD-7, BASIS-R** — not PANAS,\n  ERS, MEQ or CCQ, which the standing-dataset topics need\n- 18 pre-split exports carry no season in the filename; checked by\n  response id, **none holds anything unique**, and they are flagged\n- a participant with no season folder yet gets no Qualtrics items"
+    }
+  ],
+  "edges": [
+    {
+      "id": "e-sp-a",
+      "fromNode": "sharepoint",
+      "fromSide": "right",
+      "toNode": "a-src",
+      "toSide": "left",
+      "color": "6"
+    },
+    {
+      "id": "e-sp-m",
+      "fromNode": "sharepoint",
+      "fromSide": "right",
+      "toNode": "m-src",
+      "toSide": "left",
+      "color": "6"
+    },
+    {
+      "id": "e-sp-x",
+      "fromNode": "sharepoint",
+      "fromSide": "right",
+      "toNode": "x-src",
+      "toSide": "left",
+      "color": "6"
+    },
+    {
+      "id": "e-a1",
+      "fromNode": "a-src",
+      "fromSide": "bottom",
+      "toNode": "a-s1",
+      "toSide": "top"
+    },
+    {
+      "id": "e-a2",
+      "fromNode": "a-s1",
+      "fromSide": "right",
+      "toNode": "sc-act",
+      "toSide": "left",
+      "label": "per-minute activity"
+    },
+    {
+      "id": "e-a3",
+      "fromNode": "sc-act",
+      "fromSide": "right",
+      "toNode": "a-out",
+      "toSide": "left"
+    },
+    {
+      "id": "e-a4",
+      "fromNode": "a-out",
+      "fromSide": "bottom",
+      "toNode": "a-comp",
+      "toSide": "top"
+    },
+    {
+      "id": "e-m1",
+      "fromNode": "m-src",
+      "fromSide": "bottom",
+      "toNode": "m-s1",
+      "toSide": "top"
+    },
+    {
+      "id": "e-m2",
+      "fromNode": "m-s1",
+      "fromSide": "right",
+      "toNode": "sc-mi",
+      "toSide": "left",
+      "label": "per-epoch light"
+    },
+    {
+      "id": "e-m3",
+      "fromNode": "sc-mi",
+      "fromSide": "right",
+      "toNode": "m-out",
+      "toSide": "left"
+    },
+    {
+      "id": "e-m4",
+      "fromNode": "m-out",
+      "fromSide": "bottom",
+      "toNode": "m-comp",
+      "toSide": "top"
+    },
+    {
+      "id": "e-x1",
+      "fromNode": "x-src",
+      "fromSide": "bottom",
+      "toNode": "x-s1",
+      "toSide": "top"
+    },
+    {
+      "id": "e-x2",
+      "fromNode": "x-s1",
+      "fromSide": "right",
+      "toNode": "sc-xpw",
+      "toSide": "left",
+      "label": "per-response values"
+    },
+    {
+      "id": "e-x3",
+      "fromNode": "sc-xpw",
+      "fromSide": "right",
+      "toNode": "x-out",
+      "toSide": "left"
+    },
+    {
+      "id": "e-x4",
+      "fromNode": "x-out",
+      "fromSide": "right",
+      "toNode": "x-comp",
+      "toSide": "left"
+    },
+    {
+      "id": "e-doc",
+      "fromNode": "doc",
+      "fromSide": "right",
+      "toNode": "master",
+      "toSide": "left",
+      "color": "3",
+      "label": "copied as-is"
+    },
+    {
+      "id": "e-master-vis",
+      "fromNode": "9206a2c433e00d25",
+      "fromSide": "right",
+      "toNode": "d-run",
+      "toSide": "left",
+      "label": "read-only\nRUN · participant × season × device\n"
+    },
+    {
+      "id": "e-vis-t2",
+      "fromNode": "d-vis",
+      "fromSide": "bottom",
+      "toNode": "d-t2",
+      "toSide": "top",
+      "color": "5",
+      "label": "Select for T2 · seasons, devices, measures + checks"
+    },
+    {
+      "id": "e-t2-exp",
+      "fromNode": "d-t2",
+      "fromSide": "right",
+      "toNode": "d-exp",
+      "toSide": "left",
+      "color": "4",
+      "label": "approve"
+    },
+    {
+      "id": "e-t2-rec",
+      "fromNode": "d-t2",
+      "fromSide": "bottom",
+      "toNode": "recompute",
+      "toSide": "top",
+      "toEnd": "none",
+      "color": "1",
+      "label": "read from pre-existing T2"
+    },
+    {
+      "id": "e-run-runs",
+      "fromNode": "d-run",
+      "fromSide": "right",
+      "toNode": "runs",
+      "toSide": "top",
+      "color": "3"
+    },
+    {
+      "id": "e-exp-runs",
+      "fromNode": "d-exp",
+      "fromSide": "top",
+      "toNode": "runs",
+      "toSide": "bottom",
+      "color": "3",
+      "label": "export recorded too"
+    },
+    {
+      "id": "4182223627141e2d",
+      "fromNode": "d-run",
+      "fromSide": "bottom",
+      "toNode": "d-vis",
+      "toSide": "top",
+      "color": "5",
+      "label": "batchwise processing"
+    },
+    {
+      "id": "5a45f0e910624e62",
+      "fromNode": "d-run",
+      "fromSide": "top",
+      "toNode": "master",
+      "toSide": "bottom",
+      "fromEnd": "arrow",
+      "color": "5",
+      "label": "pre-processed data "
+    },
+    {
+      "id": "e-sp-q",
+      "fromNode": "sharepoint",
+      "fromSide": "bottom",
+      "toNode": "q-src",
+      "toSide": "left",
+      "color": "6"
+    },
+    {
+      "id": "e-q-fan",
+      "fromNode": "q-src",
+      "fromSide": "right",
+      "toNode": "q-fan",
+      "toSide": "left",
+      "color": "4"
+    },
+    {
+      "id": "e-q-clean",
+      "fromNode": "q-fan",
+      "fromSide": "right",
+      "toNode": "q-clean",
+      "toSide": "left",
+      "color": "4"
+    },
+    {
+      "id": "e-q-comp",
+      "fromNode": "q-fan",
+      "fromSide": "bottom",
+      "toNode": "q-comp",
+      "toSide": "top",
+      "color": "4"
+    },
+    {
+      "id": "e-q-out",
+      "fromNode": "q-clean",
+      "fromSide": "right",
+      "toNode": "q-out",
+      "toSide": "left",
+      "color": "5"
+    },
+    {
+      "id": "e-q-master",
+      "fromNode": "q-out",
+      "fromSide": "right",
+      "toNode": "master",
+      "toSide": "bottom",
+      "color": "5"
+    },
+    {
+      "id": "e-q-note",
+      "fromNode": "q-clean",
+      "fromSide": "bottom",
+      "toNode": "q-note",
+      "toSide": "top",
+      "color": "3"
+    }
+  ]
+}

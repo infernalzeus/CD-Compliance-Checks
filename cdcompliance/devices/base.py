@@ -30,6 +30,13 @@ class DeviceProcessor(ABC):
     #: sub-folder name inside a season folder, e.g. "Actigraph"
     folder_name: str = ""
 
+    #: True when the device's data does NOT live in the participant's season
+    #: folder. Qualtrics is the case: one export per survey per season sits in
+    #: a central archive, so finding a response for someone says nothing about
+    #: whether their visit's device data was collected. Coverage uses this to
+    #: decide whether a season has started at all.
+    external_source: bool = False
+
     @abstractmethod
     def discover(
         self,

@@ -57,6 +57,13 @@ ALL_SURVEYS = ONCE_SURVEYS + SEASONAL_SURVEYS
 ID_COLUMN = "CHIPDID"
 RESPONSE_ID = "ResponseId"
 
+#: Columns this pipeline adds to every row. The survey tool adds the same two,
+#: with the same names, so a cleaned file looks the same either way.
+#: ``source_file`` matters more here than it does there: we merge across upload
+#: batches, so without it there is no record of which batch a row arrived in.
+SEASON_COLUMN = "season"
+SOURCE_COLUMN = "source_file"
+
 # <name>_<date>_<HH.MM>, optionally a browser duplicate suffix " (1)".
 # Kept deliberately identical to the upstream tool's rule: the archive is the
 # same archive, and two different ideas of what a filename means would be worse
@@ -229,6 +236,18 @@ def _as_date(text: str) -> Optional[date]:
         return None
 
 
+def is_preview(row: dict[str, str]) -> bool:
+    """A response recorded from the Qualtrics survey preview, not by a person.
+
+    The survey tool drops these before cleaning and so must this: a preview
+    carries a real-looking CHIPDID and would otherwise be written into master
+    as that participant's answer.
+    """
+    channel = str(row.get("DistributionChannel", "")).strip().lower()
+    status = str(row.get("Status", "")).strip()
+    return channel == "preview" or status in {"Survey Preview", "1"}
+
+
 def _progress(row: dict[str, str]) -> int:
     try:
         return int(float(row.get("Progress") or 0))
@@ -306,6 +325,8 @@ def collect(scan_result: ArchiveScan,
         except (OSError, ValueError):
             continue
         for row in rows:
+            if is_preview(row):
+                continue
             pid = (row.get(ID_COLUMN) or "").strip().upper()
             if not pid:
                 continue
@@ -315,6 +336,8 @@ def collect(scan_result: ArchiveScan,
             if not rid:
                 continue
             key = (pid, export.survey, rid)
+            row = dict(row, **{SEASON_COLUMN: str(export.season or ""),
+                               SOURCE_COLUMN: export.path.name})
             found = merged.get(key)
             if found is None:
                 merged[key] = Response(pid, export.survey, export.season, row, export)
@@ -322,6 +345,9 @@ def collect(scan_result: ArchiveScan,
             # Keep the better row, and keep any season we have learnt for it.
             season = found.season if found.season is not None else export.season
             winner = better(found.row, row)
+            # The season column follows the response, not whichever export won:
+            # an untagged pre-split copy would otherwise blank its tagged twin.
+            winner = dict(winner, **{SEASON_COLUMN: str(season or "")})
             merged[key] = Response(pid, export.survey, season,
                                    winner, found.source if winner is found.row else export)
 
@@ -331,15 +357,36 @@ def collect(scan_result: ArchiveScan,
     return out
 
 
-def one_per_slot(responses: Iterable[Response]) -> dict[tuple[str, str, Optional[int]], Response]:
-    """Collapse to one response per participant / survey / season.
+def by_participant(responses: Iterable[Response]) -> dict[str, list[Response]]:
+    """Group one pass of :func:`collect` by participant.
 
-    The archive says this is already true for the seasonal surveys and not quite
-    true for enrolment, so the rule is applied rather than trusted.
+    :func:`collect` reads **every** export, so asking it per participant costs
+    the whole archive each time. Panel 1 asks about every participant at once,
+    which made the first grid render pay that price 200-odd times over. One
+    pass, grouped, answers all of them.
     """
-    best: dict[tuple[str, str, Optional[int]], Response] = {}
+    out: dict[str, list[Response]] = {}
     for r in responses:
-        key = (r.participant, r.survey, r.season)
+        out.setdefault(r.participant, []).append(r)
+    return out
+
+
+def one_per_slot(responses: Iterable[Response]) -> dict[tuple[str, str, Optional[int], str], Response]:
+    """Resolve duplicates, keyed by participant / survey / season / response id.
+
+    **Only the once-only surveys are collapsed to a single row.** Those are the
+    ones where duplicates are real: a handful of participants abandoned an
+    enrolment attempt and completed another, and keeping both would double-count
+    them. The archive shows one row per participant per season for the seasonal
+    surveys today, but a second one would be a real second response - dropping
+    it silently is exactly the data loss this module exists to prevent - so
+    every seasonal response is kept and merged on its id when written.
+    """
+    best: dict[tuple[str, str, Optional[int], str], Response] = {}
+    for r in responses:
+        # a once-only survey has one slot; a seasonal one has a slot per response
+        key = (r.participant, r.survey, r.season,
+               "" if r.survey in ONCE_SURVEYS else r.response_id)
         found = best.get(key)
         if found is None or better(r.row, found.row) is r.row:
             best[key] = r
@@ -407,16 +454,34 @@ def season_alignment(config: Config, participant: str,
 # -------------------------------------------------------------------- writing
 
 
-def target_dir(config: Config, participant: str, season_folder: Optional[str]) -> Path:
-    """Where a survey's rows are written.
+def first_season(config: Config, participant: str) -> Optional[str]:
+    """The participant's first season folder, or None if they have none yet."""
+    numbers = t2_data.season_numbers(config, participant)
+    for name, info in numbers.items():
+        if info.get("n") == 1:
+            return name
+    return next(iter(numbers), None)
 
-    Seasonal surveys land beside the other devices, in the participant's own
-    season folder. Once-only surveys have no season - forcing them into the
-    first one would make them look seasonal - so they sit at participant level.
+
+def target_dir(config: Config, participant: str, season_folder: Optional[str]) -> Path:
+    """Where a survey's rows are written - always inside a season folder.
+
+    Seasonal surveys go to their own season. Once-only surveys (enrolment and
+    the clinical ones) have no season of their own, so they go to the
+    participant's **first** season, which is when they were collected.
+
+    They were briefly written at participant level instead, which read better on
+    paper and was wrong in practice: a ``Qualtrics`` folder sitting among the
+    season folders is a folder every season-walking function has to learn to
+    ignore, and nothing that reads verdicts - the grid, the recording tree, the
+    aggregate - looks there. A participant with no season folder at all falls
+    back to participant level, because there is nowhere else to put it.
     """
     root = Path(config.paths.output_root) / participant
     if season_folder is None:
-        return root / DEVICE_DIRNAME
+        season_folder = first_season(config, participant)
+        if season_folder is None:
+            return root / DEVICE_DIRNAME
     resolved = t2_data._output_season_dir(config, participant, season_folder)
     return (resolved or root / season_folder) / DEVICE_DIRNAME
 
@@ -538,7 +603,8 @@ def content_check(config: Config, participant: str,
     by_ordinal = {info.get("n"): name for name, info in numbers.items()}
 
     slots: list[dict[str, Any]] = []
-    for (pid, survey, ordinal), r in sorted(chosen.items(), key=lambda kv: (kv[0][1], kv[0][2] or 0)):
+    for (pid, survey, ordinal, _rid), r in sorted(chosen.items(),
+                                                  key=lambda kv: (kv[0][1], kv[0][2] or 0, kv[0][3])):
         season_folder = None if survey in ONCE_SURVEYS else by_ordinal.get(ordinal)
         if survey not in ONCE_SURVEYS and season_folder is None:
             slots.append({"survey": survey, "ordinal": ordinal, "season": None,

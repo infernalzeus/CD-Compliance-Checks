@@ -168,7 +168,7 @@ class Duplicates(Base):
                 row("R_part", "CD003", "2025-09-09", "False", "99")])
         best = qi.one_per_slot(qi.collect(qi.scan(self.cfg)))
         self.assertEqual(len(best), 1)
-        self.assertEqual(best[("CD003", "enrolment", None)].response_id, "R_done")
+        self.assertEqual(best[("CD003", "enrolment", None, "")].response_id, "R_done")
 
     def test_with_none_finished_the_furthest_progress_wins(self):
         export(self.archive / "Qualtrics 07-10-2026",
@@ -176,7 +176,7 @@ class Duplicates(Base):
                [row("R_low", "CD006", "2025-09-07", "False", "34"),
                 row("R_high", "CD006", "2025-09-09", "False", "62")])
         best = qi.one_per_slot(qi.collect(qi.scan(self.cfg)))
-        self.assertEqual(best[("CD006", "enrolment", None)].response_id, "R_high")
+        self.assertEqual(best[("CD006", "enrolment", None, "")].response_id, "R_high")
 
 
 class SeasonMapping(Base):
@@ -187,7 +187,9 @@ class SeasonMapping(Base):
     def test_the_ordinal_and_the_response_date_agree(self):
         export(self.archive / "Qualtrics 02-04-26",
                "Season 3 CHiP-D CS Seasonal Visit (S3)_2 April 2026_10.00.csv",
-               [row("R_s3", "CD011", "2026-03-12")])
+               # April: inside Spring 2026. The study's seasons are calendar
+               # quarters, so March would be Winter.
+               [row("R_s3", "CD011", "2026-04-12")])
         got = qi.collect(qi.scan(self.cfg))
         aligned = qi.season_alignment(self.cfg, "CD011", got)
         self.assertEqual(len(aligned), 1)
@@ -229,10 +231,16 @@ class Writing(Base):
                 / qi.DEVICE_DIRNAME / "seasonal.csv")
         self.assertTrue(path.exists())
 
-    def test_a_once_only_survey_sits_at_participant_level_not_in_a_season(self):
+    def test_a_once_only_survey_goes_to_the_first_season(self):
+        """Not participant level: a folder beside the seasons is invisible to
+        everything that reads verdicts, and is one more thing season-walking
+        code has to ignore."""
         qi.assimilate(self.cfg)
-        path = self.cfg.paths.output_root / "CD011" / qi.DEVICE_DIRNAME / "enrolment.csv"
-        self.assertTrue(path.exists(), "enrolment must not be filed under a season")
+        path = (self.cfg.paths.output_root / "CD011" / "Autumn 2025"
+                / qi.DEVICE_DIRNAME / "enrolment.csv")
+        self.assertTrue(path.exists())
+        self.assertFalse((self.cfg.paths.output_root / "CD011"
+                          / qi.DEVICE_DIRNAME).exists())
 
     def test_a_dry_run_writes_nothing_but_reports_what_it_would(self):
         out = qi.assimilate(self.cfg, dry_run=True)
@@ -321,3 +329,185 @@ class ContentCheck(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Processor(Base):
+    """Wired in as a device: discovery, content-based completeness, processing."""
+
+    def setUp(self):
+        super().setUp()
+        from cdcompliance.devices import get_processor
+        self.proc = get_processor("qualtrics")
+        self.proc.reset()
+        self.season_folders("CD011", "Autumn 2025", "Winter 2026")
+        export(self.archive / "Qualtrics 09-02-26",
+               "Season 1 CHiP-D CS Seasonal Visit (S1)_9 February 2026_10.00.csv",
+               [row("R_a", "CD011", "2025-11-05")])
+        export(self.archive / "Qualtrics 09-02-26",
+               "CHiP-D Enrolment_9 February 2026_10.01.csv",
+               [row("R_e", "CD011", "2025-09-28", "False", "43")])
+        self.selection = type("Sel", (), {"dry_run": False, "force": False})()
+        self.bus = type("Bus", (), {"emit": staticmethod(lambda e: None)})()
+
+    def season_dir(self, name):
+        return self.cfg.paths.output_root / "CD011" / name
+
+    def test_it_is_a_registered_implemented_device(self):
+        from cdcompliance.devices import implemented_devices
+        self.assertIn("qualtrics", implemented_devices())
+
+    def test_discovery_looks_at_the_archive_not_the_season_folder(self):
+        items = self.proc.discover(self.cfg, "CD011", "Autumn 2025",
+                                   self.season_dir("Autumn 2025"))
+        surveys = sorted(i.extra["survey"] for i in items)
+        # the first season carries its own seasonal survey AND the once-only one
+        self.assertEqual(surveys, ["enrolment", "seasonal"])
+
+    def test_a_once_only_survey_is_discovered_once_not_per_season(self):
+        later = self.proc.discover(self.cfg, "CD011", "Winter 2026",
+                                   self.season_dir("Winter 2026"))
+        self.assertNotIn("enrolment", [i.extra["survey"] for i in later])
+
+    def test_a_once_only_survey_is_written_into_the_first_season(self):
+        items = self.proc.discover(self.cfg, "CD011", "Autumn 2025",
+                                   self.season_dir("Autumn 2025"))
+        item = next(i for i in items if i.extra["survey"] == "enrolment")
+        self.assertEqual(Path(item.output_dir),
+                         self.cfg.paths.output_root / "CD011" / "Autumn 2025"
+                         / qi.DEVICE_DIRNAME)
+
+    def test_an_unprocessed_response_is_not_complete(self):
+        item = self.proc.discover(self.cfg, "CD011", "Autumn 2025",
+                                  self.season_dir("Autumn 2025"))[0]
+        self.assertFalse(self.proc.is_complete(item, self.cfg))
+
+    def test_processing_writes_the_row_and_then_it_is_complete(self):
+        items = self.proc.discover(self.cfg, "CD011", "Autumn 2025",
+                                   self.season_dir("Autumn 2025"))
+        item = next(i for i in items if i.extra["survey"] == "seasonal")
+        result = self.proc.process(item, self.cfg, self.selection, self.bus)
+        self.assertEqual(result.status, "done")
+        self.assertTrue(self.proc.is_complete(item, self.cfg))
+
+    def test_a_finished_response_passes_and_an_abandoned_one_is_review(self):
+        items = self.proc.discover(self.cfg, "CD011", "Autumn 2025",
+                                   self.season_dir("Autumn 2025"))
+        verdicts = {}
+        for item in items:
+            r = self.proc.process(item, self.cfg, self.selection, self.bus)
+            verdicts[item.extra["survey"]] = r.compliance.verdict
+        self.assertEqual(verdicts["seasonal"], "PASS")
+        self.assertEqual(verdicts["enrolment"], "REVIEW")   # 43%, not submitted
+
+    def test_a_new_response_in_a_written_season_reopens_that_season(self):
+        """An existence check would call it done. This one does not."""
+        for item in self.proc.discover(self.cfg, "CD011", "Autumn 2025",
+                                       self.season_dir("Autumn 2025")):
+            self.proc.process(item, self.cfg, self.selection, self.bus)
+        export(self.archive / "Qualtrics 09-03-26",
+               "Season 1 CHiP-D CS Seasonal Visit (S1)_9 March 2026_10.00.csv",
+               [row("R_a", "CD011", "2025-11-05"), row("R_a2", "CD011", "2025-11-06")])
+        self.proc.reset()
+        items = self.proc.discover(self.cfg, "CD011", "Autumn 2025",
+                                   self.season_dir("Autumn 2025"))
+        seasonal = [i for i in items if i.extra["survey"] == "seasonal"]
+        self.assertEqual(len(seasonal), 2)
+        self.assertEqual(sum(0 if self.proc.is_complete(i, self.cfg) else 1
+                             for i in seasonal), 1)
+
+    def test_a_dry_run_writes_nothing(self):
+        item = self.proc.discover(self.cfg, "CD011", "Autumn 2025",
+                                  self.season_dir("Autumn 2025"))[0]
+        self.selection.dry_run = True
+        r = self.proc.process(item, self.cfg, self.selection, self.bus)
+        self.assertEqual(r.status, "skipped")
+        self.assertFalse(Path(item.output_dir).exists())
+
+    def test_a_participant_with_nothing_in_the_archive_gets_no_items(self):
+        self.assertEqual(
+            self.proc.discover(self.cfg, "CD999", "Autumn 2025",
+                               self.cfg.paths.output_root / "CD999" / "Autumn 2025"), [])
+
+
+class Previews(Base):
+    """A Qualtrics preview carries a real-looking ID and is not a person."""
+
+    def test_a_preview_response_is_not_assimilated(self):
+        header = HEADER + ["DistributionChannel"]
+        folder = self.archive / "Qualtrics 19-01-26"
+        folder.mkdir(parents=True, exist_ok=True)
+        with (folder / "Season 1 CHiP-D CS Seasonal Visit (S1)_19 January 2026_11.00.csv"
+              ).open("w", newline="", encoding="utf-8-sig") as fh:
+            w = csv.writer(fh)
+            w.writerow(header)
+            w.writerow([c + " text" for c in header])
+            w.writerow(['{"ImportId":"x"}'] * len(header))
+            w.writerow(row("R_real", "CD011", "2025-11-05") + ["anonymous"])
+            w.writerow(row("R_prev", "CD011", "2025-11-05") + ["preview"])
+        got = qi.collect(qi.scan(self.cfg))
+        self.assertEqual([r.response_id for r in got], ["R_real"])
+
+
+class Cleaning(Base):
+    """Step 2: the survey tool's rules, run over the assimilated rows.
+
+    The real repo is not assumed to be present, so a stand-in with the same
+    entry point is used - the contract being tested is ours, not theirs.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from cdcompliance import qualtrics_clean
+        self.qc = qualtrics_clean
+        self.season_folders("CD011", "Autumn 2025")
+        export(self.archive / "Qualtrics 09-02-26",
+               "Season 1 CHiP-D CS Seasonal Visit (S1)_9 February 2026_10.00.csv",
+               [row("R_a", "CD011", "2025-11-05")])
+        qi.assimilate(self.cfg)
+        self.raw = (self.cfg.paths.output_root / "CD011" / "Autumn 2025"
+                    / qi.DEVICE_DIRNAME / "seasonal.csv")
+
+    def fake_repo(self, body: str) -> None:
+        repo = self.tmp / "survey-tool"
+        (repo / "clean").mkdir(parents=True, exist_ok=True)
+        (repo / "clean" / "__init__.py").write_text("", encoding="utf-8")
+        (repo / "clean" / "common.py").write_text(body, encoding="utf-8")
+        self.cfg.tools.qualtrics_repo = repo
+
+    def test_without_the_repo_the_raw_file_still_stands(self):
+        self.cfg.tools.qualtrics_repo = self.tmp / "not-cloned"
+        out = self.qc.rebuild(self.cfg, self.raw, "seasonal", 1)
+        self.assertEqual(out["state"], "skipped")
+        self.assertIn("not cloned", out["note"])
+        self.assertTrue(self.raw.exists())
+
+    def test_the_clean_file_is_derived_beside_the_raw_one(self):
+        self.fake_repo("def clean(df, survey, season=None):\n"
+                       "    return df.drop(columns=['ResponseId'])\n")
+        out = self.qc.rebuild(self.cfg, self.raw, "seasonal", 1)
+        self.assertEqual(out["state"], "done")
+        clean = self.raw.with_name("seasonal_clean.csv")
+        self.assertTrue(clean.exists())
+        self.assertNotIn("ResponseId", self.qc.read_csv(clean)[0])
+        self.assertIn("ResponseId", self.qc.read_csv(self.raw)[0])
+
+    def test_the_clean_file_is_rebuilt_not_appended(self):
+        """Cleaning drops the merge key, so the derived file can only be redone."""
+        self.fake_repo("def clean(df, survey, season=None):\n    return df\n")
+        self.qc.rebuild(self.cfg, self.raw, "seasonal", 1)
+        self.qc.rebuild(self.cfg, self.raw, "seasonal", 1)
+        clean = self.raw.with_name("seasonal_clean.csv")
+        self.assertEqual(len(self.qc.read_csv(clean)), 1)
+
+    def test_a_cleaning_rule_that_fails_does_not_lose_the_raw_data(self):
+        self.fake_repo("def clean(df, survey, season=None):\n"
+                       "    return df[['NoSuchColumn']]\n")
+        out = self.qc.rebuild(self.cfg, self.raw, "seasonal", 1)
+        self.assertEqual(out["state"], "error")
+        self.assertTrue(self.raw.exists())
+        self.assertFalse(self.raw.with_name("seasonal_clean.csv").exists())
+
+    def test_provenance_columns_are_written(self):
+        got = self.qc.read_csv(self.raw)[0]
+        self.assertEqual(got[qi.SEASON_COLUMN], "1")
+        self.assertIn("Season 1", got[qi.SOURCE_COLUMN])

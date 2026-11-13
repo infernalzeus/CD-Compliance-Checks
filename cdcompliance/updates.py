@@ -60,6 +60,7 @@ def component_specs(config: Config) -> list[dict[str, Any]]:
     for attr, key, role in (
         ("luminosity_repo", "luminosity-metrics", "MiEYE - luminosity"),
         ("expiwell_repo", "expiwell-metrics", "Expiwell - ESM compliance"),
+        ("qualtrics_repo", "qualtrics-preprocessing", "Qualtrics - survey cleaning"),
     ):
         path = getattr(config.tools, attr, None)
         if path is None:

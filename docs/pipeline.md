@@ -1,6 +1,6 @@
 # CHiP-D Compliance — System Architecture
 
-> **The flowchart lives in [`cd-compliance-pipeline.canvas`](cd-compliance-pipeline.canvas)**
+> **The flowchart lives in [`Data Control Pipeline.proposed.canvas`](Data%20Control%20Pipeline.proposed.canvas)**
 > (open in Obsidian). It reads left to right: raw data from SharePoint → one lane
 > per device (what each score means and how it is calculated) → the master tree →
 > the dashboard (Compliance → Visualise → T2 → Export). This page is the text
@@ -117,7 +117,7 @@ flags and reads the tool's `*_compliance.json` back.
 
 ## Whole-system flowchart
 
-Open **[`cd-compliance-pipeline.canvas`](cd-compliance-pipeline.canvas)** in Obsidian
+Open **[`Data Control Pipeline.proposed.canvas`](Data%20Control%20Pipeline.proposed.canvas)** in Obsidian
 for the visual flowchart. At a glance:
 
 - **OneDrive staging (read-only)** → `Actigraph/*.bin` and `MiEYE/*-logged.csv`.
@@ -164,7 +164,7 @@ for the visual flowchart. At a glance:
 Panel 2's aggregate automatically. The per-item drill-down (`item_measures`)
 lists that device's inspectable CSV/PDF outputs.
 
-> **See also:** `docs/cd-compliance-pipeline.canvas` (Obsidian canvas view) and the
+> **See also:** `docs/Data Control Pipeline.proposed.canvas` (Obsidian canvas view) and the
 > per-repo READMEs. The luminosity tool's own docs live in
 > [`luminosity-metrics/README.md`](https://github.com/infernalzeus/luminosity-metrics).
 

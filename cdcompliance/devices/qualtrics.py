@@ -14,15 +14,14 @@ One WorkItem per **participant / season / survey**:
 item                         where it is written
 ===========================  =========================================
 seasonal, retrospective      <output>/<pid>/<Season>/Qualtrics/<survey>.csv
-enrolment, clinical_*        <output>/<pid>/Qualtrics/<survey>.csv
+enrolment, clinical_*        <output>/<pid>/<first Season>/Qualtrics/<survey>.csv
 ===========================  =========================================
 
 The once-only surveys have no season of their own (checked: CD008 has exactly
 one enrolment response, and the handful of participants with two rows have an
 abandoned attempt beside a completed one — not a second season). They are
-discovered against the participant's **first** season, because discovery is
-season-scoped, but they are written at participant level so they never look
-seasonal.
+discovered against, and written into, the participant's **first** season, which
+is when they were collected.
 
 ``is_complete`` is a **content** check, not an existence check: a season's CSV
 is never finished, because a later upload batch can add a response to a season
@@ -30,7 +29,9 @@ whose file already exists. See ``cdcompliance/qualtrics_intake.py``.
 """
 from __future__ import annotations
 
+import json
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -54,6 +55,10 @@ def _qi():
 def _t2():
     from .. import t2_data
     return t2_data
+
+
+#: How long a fingerprint is trusted before the archive is re-walked.
+_FINGERPRINT_TTL = 5.0
 
 
 def _fingerprint(root: Path) -> tuple[int, float]:
@@ -82,36 +87,52 @@ def _fingerprint(root: Path) -> tuple[int, float]:
 class QualtricsProcessor(DeviceProcessor):
     name = "qualtrics"
     folder_name = "Qualtrics"
+    external_source = True          # the archive, not the participant's folder
 
     def __init__(self) -> None:
         self._key: Optional[tuple[str, int, float]] = None
+        self._checked = 0.0
         self._scan = None                      # qi.ArchiveScan
-        self._responses: dict[str, list] = {}  # pid -> [qi.Response]
+        self._responses = None                 # pid -> [qi.Response]
 
     # ---- archive access ------------------------------------------------------
     def _archive(self, config: Config):
         qi = _qi()
         root = qi.archive_root(config)
+        # Fingerprinting walks the archive, and discover() is called once per
+        # participant per season - several hundred times for one grid render.
+        # Re-checking a few times a second is enough to notice a new batch.
+        now = time.monotonic()
+        if self._scan is not None and now - self._checked < _FINGERPRINT_TTL:
+            return self._scan
+        self._checked = now
         key = (str(root),) + _fingerprint(root)
         if key != self._key:
             self._key = key
             self._scan = qi.scan(config, root)
-            self._responses = {}
+            self._responses = None
         return self._scan or qi.ArchiveScan()
 
     def _for(self, config: Config, participant: str) -> list:
+        """This participant's responses, from a single pass over the archive.
+
+        Filtering inside ``collect`` would re-read all 112 exports per
+        participant, and the grid asks about every participant at once.
+        """
         qi = _qi()
         found = self._archive(config)
-        pid = participant.strip().upper()
-        if pid not in self._responses:
-            chosen = qi.one_per_slot(qi.collect(found, participants=[pid]))
-            self._responses[pid] = sorted(chosen.values(),
-                                          key=lambda r: (r.survey, r.season or 0))
-        return self._responses[pid]
+        if self._responses is None:
+            grouped = qi.by_participant(qi.one_per_slot(qi.collect(found)).values())
+            self._responses = {
+                pid: sorted(items, key=lambda r: (r.survey, r.season or 0))
+                for pid, items in grouped.items()
+            }
+        return self._responses.get(participant.strip().upper(), [])
 
     def reset(self) -> None:
         """Drop the cache. Used after an assimilate so the grid re-reads."""
-        self._key, self._scan, self._responses = None, None, {}
+        self._key, self._scan, self._responses = None, None, None
+        self._checked = 0.0
 
     # ---- discovery -----------------------------------------------------------
     def _output_dir(self, config: Config, participant: str,
@@ -135,7 +156,7 @@ class QualtricsProcessor(DeviceProcessor):
                 # discovered exactly once, and write it at participant level.
                 if first_season is None or norm(season) != norm(first_season):
                     continue
-                out = self._output_dir(config, participant, None)
+                out = self._output_dir(config, participant, first_season)
             else:
                 folder = by_ordinal.get(r.season)
                 if folder is None or norm(season) != norm(folder):
@@ -221,6 +242,21 @@ class QualtricsProcessor(DeviceProcessor):
 
         out = qi.write_rows(path, rows, dry_run=False)
         self.reset()                       # the file changed; the cache has not
+
+        # Step 2: derive <survey>_clean.csv from the raw file using the survey
+        # tool's own rules. Rebuilt, never appended - cleaning drops ResponseId,
+        # so a cleaned file cannot be merged against a later batch.
+        from .. import qualtrics_clean
+        cleaned = qualtrics_clean.rebuild(config, path, survey,
+                                          item.extra.get("ordinal"))
+        if cleaned["state"] == "done":
+            bus.emit({"type": "log", "level": "info",
+                      "message": f"  cleaned {cleaned['rows_in']} -> {cleaned['rows_out']} row(s)"})
+        elif cleaned["state"] == "error":
+            bus.emit({"type": "log", "level": "warning",
+                      "message": f"  cleaning skipped: {cleaned['note']}"})
+        for line in (cleaned.get("log") or "").splitlines():
+            bus.emit({"type": "log", "level": "info", "message": "    " + line.strip()})
         row = rows[0]
         finished = str(row.get("Finished", "")).strip().lower() in {"true", "1", "yes"}
         try:
@@ -235,10 +271,26 @@ class QualtricsProcessor(DeviceProcessor):
             summary={"survey": survey, "ordinal": item.extra.get("ordinal"),
                      "recorded": item.extra.get("recorded"),
                      "finished": finished, "progress": progress,
-                     "responses_in_file": out["total"]},
+                     "responses_in_file": out["total"],
+                     "cleaned": cleaned["state"],
+                     "clean_rows": cleaned["rows_out"],
+                     "clean_note": cleaned["note"]},
             notes=([] if finished else
                    [f"response is {progress}% complete and was not submitted"]),
         )
+        # Every other device leaves a <stem>_compliance.json beside its outputs;
+        # that file is what the grid, the recording tree and the aggregate read
+        # verdicts from. Without it Qualtrics would process fine and show blank.
+        comp_json = Path(item.output_dir) / f"{survey}_compliance.json"
+        comp_json.write_text(json.dumps({
+            "participant": item.participant,
+            "season": item.extra.get("ordinal"),
+            "device": self.name,
+            "compliance": compliance.to_dict() if hasattr(compliance, "to_dict")
+            else {"verdict": compliance.verdict, "summary": compliance.summary},
+        }, indent=2), encoding="utf-8")
         return ItemResult(item=item, status="done", output_dir=item.output_dir,
-                          compliance=compliance, artifacts=[path],
+                          compliance=compliance,
+                          artifacts=([path, comp_json] +
+                                     ([Path(cleaned["path"])] if cleaned["state"] == "done" else [])),
                           started_at=started, finished_at=datetime.now())

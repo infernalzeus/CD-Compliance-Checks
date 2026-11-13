@@ -76,11 +76,29 @@ class SeasonDeviceStatus:
 class ParticipantStatus:
     participant: str
     suffix: str
-    state: str  # pending | complete | partial | empty
+    #: PROCESSING state: did we process what is there.
+    #: pending | complete | partial | empty
+    state: str
     in_output: bool
     done: int
     total: int  # processable items
     items: list[SeasonDeviceStatus] = field(default_factory=list)
+    #: DATA COVERAGE: how much of the expected data exists at all.
+    #: full | partial | sparse | none. A participant can be `complete` and
+    #: `sparse` at once - everything we found is processed, and we found one
+    #: device out of four.
+    data_state: str = "none"
+    #: implemented devices that have input somewhere for this participant
+    devices_present: list[str] = field(default_factory=list)
+    devices_missing: list[str] = field(default_factory=list)
+    n_devices_expected: int = 0
+    #: Seasons that exist but are missing an expected device, worst first.
+    season_gaps: list = field(default_factory=list)
+    #: One entry per season SLOT (always `n_season_slots` of them), for the
+    #: marks under the folder number. Devices come and go; seasons do not.
+    season_slots: list = field(default_factory=list)
+    n_season_slots: int = 4
+    n_seasons: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -91,6 +109,15 @@ class ParticipantStatus:
             "done": self.done,
             "total": self.total,
             "items": [vars(i) for i in self.items],
+            "data_state": self.data_state,
+            "devices_present": self.devices_present,
+            "devices_missing": self.devices_missing,
+            "n_devices_expected": self.n_devices_expected,
+            "season_gaps": self.season_gaps,
+            "n_season_gaps": len(self.season_gaps),
+            "season_slots": self.season_slots,
+            "n_season_slots": self.n_season_slots,
+            "n_seasons": self.n_seasons,
         }
 
 
@@ -105,6 +132,14 @@ def _discover_items(config: Config, participant: str, devices: list[str]) -> lis
     )
     # A sink-less bus so discovery emits nothing during status queries.
     return discover(config, selection, EventBus())
+
+
+def _external(device: str) -> bool:
+    """True when this device's data is not stored in the participant's folder."""
+    try:
+        return bool(getattr(get_processor(device), "external_source", False))
+    except Exception:
+        return False
 
 
 def participant_status(
@@ -143,12 +178,116 @@ def participant_status(
         state = "empty"
     elif done == total:
         state = "complete"       # every expected output present
-    elif in_output:
-        # The output folder exists but is missing expected outputs (deleted, or
-        # a new season/file not yet processed) -> partial (orange), needs a run.
-        state = "partial"
+    elif done == 0:
+        # Nothing has been processed. An output folder may still exist - a
+        # cancelled run creates one - and "partial" for 0 of 20 is simply
+        # untrue, so the folder's existence does not get a vote here.
+        state = "pending"
     else:
-        state = "pending"        # never processed, not in the output tree
+        # Some outputs are there and some are not: a new season, a deleted
+        # file, or a run that stopped part way.
+        state = "partial"
+
+    # --- data coverage, which is a different question ------------------------
+    # The study collects every implemented device from every participant. A
+    # participant whose only device is Actigraph is not "done" in any useful
+    # sense, however thoroughly that one device was processed - so coverage is
+    # reported separately rather than folded into the colour.
+    expected = sorted(devices)
+    present = sorted({it.device for it in processable})
+    missing = [d for d in expected if d not in present]
+    seasons = sorted({it.season for it in processable})
+
+    # Coverage is judged season by season, not once over the whole folder.
+    # Judged once, a participant with Actigraph in spring and MiEYE in autumn
+    # has every device "present" and reads as complete, while in truth both
+    # seasons have a hole in them. That is exactly how CD011's autumn folder -
+    # which exists but holds nothing - passed as ready.
+    all_seasons = sorted({it.season for it in items})
+    season_gaps: list[dict[str, Any]] = []
+    for name in all_seasons:
+        have = {it.device for it in processable if it.season == name}
+        gaps = [d for d in expected if d not in have]
+        if gaps:
+            season_gaps.append({
+                "season": name,
+                "missing": gaps,
+                "present": sorted(have),
+                # An "empty" season folder is a different problem from a season
+                # that is merely short of one device.
+                "empty": not have,
+            })
+    season_gaps.sort(key=lambda g: (not g["empty"], -len(g["missing"]), g["season"]))
+
+    from . import t2_data                  # local: t2_data -> results -> manifest
+
+    # --- the four season slots -----------------------------------------------
+    # Ordered the way the study runs: autumn, then winter, spring, summer. A
+    # folder not named that way keeps its place in discovery order and says so.
+    gap_by_season = {g["season"]: g for g in season_gaps}
+    done_by_season: dict[str, list[bool]] = {}
+    for st_ in statuses:
+        if st_.has_input:
+            done_by_season.setdefault(st_.season, []).append(st_.complete)
+
+    # Ordered the same way the right-hand board orders them - by the data's own
+    # dates - so slot 2 on the left and S2 on the right are the same season.
+    numbers = t2_data.season_numbers(config, participant)
+    by_norm = {t2_data._norm_season(k): v for k, v in numbers.items()}
+    ranked = sorted(
+        all_seasons,
+        key=lambda n: (by_norm.get(t2_data._norm_season(n), {}).get("n") or 99, n))
+    slots: list[dict[str, Any]] = []
+    for i, name in enumerate(ranked):
+        meta = by_norm.get(t2_data._norm_season(name), {})
+        gap = gap_by_season.get(name)
+        got = done_by_season.get(name, [])
+        # A season has only "started" once something was collected IN its own
+        # folder. A Qualtrics response alone does not count: those live in a
+        # central archive, so finding one says nothing about whether the visit
+        # happened - and marking 134 untouched folders amber because a survey
+        # exists is noise, not information.
+        in_folder = {it.device for it in processable
+                     if it.season == name and not _external(it.device)}
+        if not in_folder:
+            data = "none"
+        elif gap:
+            data = "partial"
+        else:
+            data = "full"
+        slots.append({
+            "n": i + 1,
+            "season": name,
+            "label": meta.get("folder_label") or t2_data._norm_season(name),
+            "data": data,
+            "missing": (gap or {}).get("missing", []),
+            # Processing, so a mark can say "there and dealt with" as well as
+            # "there". Empty seasons have nothing to process and say so.
+            "processing": ("empty" if not got else
+                           "complete" if all(got) else
+                           "partial" if any(got) else "pending"),
+            "unplaced": meta.get("n") is None,
+            "conflict": bool(meta.get("label_conflict")),
+            "duplicate": bool(meta.get("duplicate_key")),
+        })
+    n_slots = max(4, len(slots))
+    while len(slots) < n_slots:
+        slots.append({"n": len(slots) + 1, "season": None, "label": None,
+                      "data": "absent", "missing": [], "processing": "empty",
+                      "unplaced": False, "conflict": False, "duplicate": False})
+
+    # Coverage of the FOLDER, which is what the colour reports. The per-season
+    # holes below are the right-hand panel's business: a participant with every
+    # device, one of whose seasons is short of one, is not the same problem as a
+    # participant who never had a light logger at all.
+    if not present:
+        data_state = "none"
+    elif not missing:
+        data_state = "full"
+    elif len(present) >= max(1, len(expected) // 2):
+        data_state = "partial"
+    else:
+        data_state = "sparse"
 
     return ParticipantStatus(
         participant=participant,
@@ -158,6 +297,14 @@ def participant_status(
         done=done,
         total=total,
         items=statuses,
+        data_state=data_state,
+        devices_present=present,
+        devices_missing=missing,
+        n_devices_expected=len(expected),
+        season_gaps=season_gaps,
+        season_slots=slots,
+        n_season_slots=n_slots,
+        n_seasons=len(seasons),
     )
 
 
@@ -291,12 +438,24 @@ def season_board(
             state = "pending"
         seasons.append({
             "season": name,                                   # real folder name
-            "label": info.get("season_label") or name,        # what people read
+            # What the study calls the folder. The calendar season derived from
+            # the recording dates is a separate field: printing it as the label
+            # gave CD011 two seasons both reading "Winter 2025/26".
+            "label": info.get("folder_label") or t2_data._norm_season(name),
+            "calendar_label": info.get("season_label"),
+            "label_conflict": bool(info.get("label_conflict")),
+            "duplicate_key": info.get("duplicate_key") or [],
             "n": info.get("n"),                               # 1st..4th season
             "season_key": info.get("season_key"),
             "basis": info.get("basis"),
             "state": state,
             "devices": rows,
+            # Implemented devices with nothing to process in THIS season. The
+            # season light only reports processing, so without this a season
+            # holding one device of four looked identical to a complete one.
+            "gaps": [r["device"] for r in rows
+                     if r["implemented"] and not r["has_input"]],
+            "n_devices": sum(1 for r in rows if r["implemented"]),
         })
 
     seasons.sort(key=lambda s: (s["n"] is None, s["n"] or 0, s["label"]))

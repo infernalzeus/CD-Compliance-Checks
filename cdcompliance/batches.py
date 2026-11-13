@@ -111,6 +111,21 @@ def public_dir(config: Config) -> Path:
 
 
 def private_dir(config: Config) -> Path:
+    """Where a batch's identifying detail lives.
+
+    Batch folders used to sit loose in ``_private/``, so anything else put
+    there - the compliance reports, for one - listed as though it were a batch.
+    Each kind of record now has its own folder under ``_private``:
+
+        runs/batches/            public, stripped - what the batch list reads
+        runs/_private/batches/   batch.json + events.jsonl, with identifiers
+        runs/_private/reports/   compliance reports (they name participants)
+    """
+    return Path(config.runs_dir) / "_private" / "batches"
+
+
+def legacy_private_dir(config: Config) -> Path:
+    """The pre-split location, still read so older runs stay visible."""
     return Path(config.runs_dir) / "_private"
 
 
@@ -295,6 +310,8 @@ def archive_batch(config: Config, batch_id: str, initials: str) -> dict[str, Any
     (dest_dir / f"{batch_id}.json").write_text(json.dumps(rec, indent=2), encoding="utf-8")
     src.unlink()
     priv = private_dir(config) / batch_id
+    if not priv.exists() and (legacy_private_dir(config) / batch_id).exists():
+        priv = legacy_private_dir(config) / batch_id
     if priv.is_dir():
         pa = private_dir(config) / "_archive"
         pa.mkdir(parents=True, exist_ok=True)
@@ -306,7 +323,10 @@ def read_private(config: Config, batch_id: str) -> dict[str, Any]:
     """The local full record of a batch (active or archived)."""
     if not re.fullmatch(r"[A-Za-z0-9-]+", batch_id or ""):
         raise ValueError("invalid batch id")
-    for folder in (private_dir(config) / batch_id, private_dir(config) / "_archive" / batch_id):
+    for folder in (private_dir(config) / batch_id,
+                   private_dir(config) / "_archive" / batch_id,
+                   legacy_private_dir(config) / batch_id,
+                   legacy_private_dir(config) / "_archive" / batch_id):
         f = folder / "batch.json"
         if f.is_file():
             return json.loads(f.read_text(encoding="utf-8"))

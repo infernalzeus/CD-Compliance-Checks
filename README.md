@@ -408,10 +408,12 @@ A grid of the folders that have already been processed.
 writes **no data** — only a record of what was chosen.
 
 1. Choose the **seasons**. These are seasons *of the year* — `Autumn 2025`,
-   `Winter 2025/26` — worked out from the dates the recordings actually cover,
-   not from the folder name. That matters: one person's folder may say
-   `Winter 2025` and another's `Winter 2026` for the same January. The number on
-   each chip is how many of the selected participants have data in that season.
+   `Winter 2026` — worked out from the dates the recordings actually cover, not
+   from the folder name. A season is a calendar quarter beginning on 1 January:
+   winter is January to March of the year it names, and no season crosses a new
+   year. That matters: one person's folder may say `Winter 2025` and another's
+   `Winter 2026` for the same February. The number on each chip is how many of
+   the selected participants have data in that season.
 2. Choose the **devices** and, if you want fewer, the **variables** (every
    variable in the data dictionary is listed with its unit and definition).
 3. Press **Check availability**. This reads the processed outputs and reports:

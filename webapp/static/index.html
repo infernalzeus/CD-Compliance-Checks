@@ -61,48 +61,68 @@
 
   <!-- ============================ PANEL 1 ============================ -->
   <main class="panel" id="panel-run">
+    <!-- One bar for everything that acts. The columns below only select
+         (left) and review (right); nothing in them starts a run. -->
+    <header class="actionbar">
+      <div class="ab-g">
+        <span class="ab-lbl">Select</span>
+        <button class="btn ghost flagbtn" id="flag-filter" title="Select only the folders holding files the pipeline cannot process">⛔ Blocked <span class="flagcount" id="flag-count"></span></button>
+        <button class="btn ghost" id="incomplete-filter" title="Select only the folders missing one or more expected devices">◌ Incomplete <span class="flagcount" id="incomplete-count"></span></button>
+        <button class="btn ghost" id="ready-filter" title="Select only the folders that have every expected device and still have something to process">● Ready <span class="flagcount" id="ready-count"></span></button>
+        <button class="btn ghost" id="clear-run">Clear</button>
+        <span class="sel-count" id="sel-count-run">0 selected</span>
+      </div>
+
+      <div class="ab-g ab-mode" role="radiogroup" aria-label="What RUN does">
+        <span class="ab-lbl">Mode</span>
+        <label class="seg" title="Process new samples and anything unfinished. Folders already complete are skipped."><input type="radio" name="runmode" value="new" checked /><span>New &amp; unfinished</span></label>
+        <label class="seg" title="Dry run: list what would be processed or skipped, plus the naming check. Nothing is downloaded or written."><input type="radio" name="runmode" value="preview" /><span>Preview</span></label>
+        <label class="seg warn" title="Redo everything selected, including items already complete."><input type="radio" name="runmode" value="force" /><span>Force reprocess</span></label>
+        <label class="initials" title="Your initials (2-4 letters). Required for runs that write data; recorded on the batch."><span>Initials</span><input id="initials" type="text" maxlength="4" autocomplete="off" spellcheck="false" placeholder="YK" /></label>
+        <label class="chk debug" title="Show every line the analysis tools print in the log"><input type="checkbox" id="verbose" checked /> debug</label>
+      </div>
+
+      <div class="ab-g ab-go">
+        <button class="btn run" id="run-btn">RUN CHECKS</button>
+        <button class="btn ghost" id="report-btn" title="Build a compliance report over the selected folders. Reads only — nothing is processed.">☰ Report</button>
+      </div>
+      <div class="ab-plan run-plan" id="run-plan">Select folders to see what RUN will do.</div>
+    </header>
+
     <section class="left">
       <div class="panel-head">
         <h2>Source · WT OneDrive staging</h2>
-        <div class="controls">
-          <button class="btn ghost flagbtn" id="flag-filter" title="Show and select only folders with naming problems">⚑ Flagged <span class="flagcount" id="flag-count"></span></button>
-          <button class="btn ghost" id="clear-run">Clear selection</button>
-        </div>
-      </div>
-      <div class="runmode" role="radiogroup" aria-label="What RUN does">
-        <span class="runmode-lbl">Run mode</span>
-        <label class="seg" title="Process new samples and anything unfinished. Folders already complete are skipped."><input type="radio" name="runmode" value="new" checked /><span>New &amp; unfinished</span></label>
-        <label class="seg" title="Dry run: list what would be processed or skipped, plus the naming check. Nothing is downloaded or written."><input type="radio" name="runmode" value="preview" /><span>Preview (dry run)</span></label>
-        <label class="seg warn" title="Redo everything for the selected folders, including items already complete."><input type="radio" name="runmode" value="force" /><span>Force reprocess</span></label>
-        <label class="initials" title="Your initials (2-4 letters). Required for runs that write data; recorded on the batch. Remembered for your account."><span>Initials</span><input id="initials" type="text" maxlength="4" autocomplete="off" spellcheck="false" placeholder="YK" /></label>
-        <label class="chk debug" title="Show every line the analysis tools print in the log"><input type="checkbox" id="verbose" checked /> debug output</label>
       </div>
       <div class="grid" id="grid-run"></div>
-      <div class="legend">
-        <span><i class="sw pending"></i> not processed</span>
-        <span><i class="sw complete"></i> processed</span>
-        <span><i class="sw partial"></i> partial (new/needs run)</span>
-        <span><i class="sw empty"></i> no data</span>
-        <span><i class="sw badge skipped">✕</i> files skipped</span>
-        <span><i class="sw badge warning">!</i> naming warning</span>
+      <!-- Two different questions, deliberately shown two different ways.
+           Colour = can this folder be run, and has it been. Marks = which of
+           the four seasons have data, one mark per season so that adding a
+           device never adds a mark. Which device is missing from which season
+           is the right-hand panel's job, not a colour over the whole cell. -->
+      <div class="legend legend-2">
+        <span class="lg-head">Colour</span>
+        <span><i class="sw tone-empty"></i> no data at all</span>
+        <span><i class="sw tone-incomplete"></i> data incomplete — a device is missing</span>
+        <span><i class="sw tone-ready"></i> complete — ready to process</span>
+        <span><i class="sw tone-running"></i> complete — partly processed</span>
+        <span><i class="sw tone-done"></i> complete — processed</span>
+        <span><i class="sw badge skipped">✕</i> file cannot be processed</span>
+        <span class="lg-head">Marks · one per season</span>
+        <span><i class="sw cov-dot s-full"></i> complete</span>
+        <span><i class="sw cov-dot s-short"></i> has data, something expected is missing</span>
+        <span><i class="sw cov-dot s-off"></i> nothing here yet</span>
+        <span class="lg-note">Naming problems are on the right, under Naming — they do not mark the cell.</span>
       </div>
       <div class="logbox">
         <div class="logbox-head">MESSAGE / LOG</div>
         <div class="log" id="log-run"></div>
       </div>
-      <div class="batchbox">
-        <div class="logbox-head batch-head">
-          <span>BATCHES · staging → master</span>
-          <label class="chk" title="Include batches that were removed from the list"><input type="checkbox" id="show-archived" /> show archived</label>
-        </div>
-        <div class="batchlist" id="batchlist"><div class="muted">No batches yet.</div></div>
-      </div>
     </section>
 
     <div class="middle">
-      <button class="btn run" id="run-btn">RUN<br />CHECKS</button>
-      <div class="run-plan" id="run-plan">Select folders to see what RUN will do.</div>
-      <div class="sel-count" id="sel-count-run">0 selected</div>
+      <!-- Drag to widen either column; the width is remembered. -->
+      <div class="splitter" id="split-run" title="Drag to resize the columns · double-click to reset"></div>
+      <span class="seam" aria-hidden="true"></span>
     </div>
 
     <!-- One column, four views. Stacked boxes meant scrolling past three
@@ -122,18 +142,26 @@
         <button class="rtab" data-rtab="progress" role="tab" title="What the running job is doing, item by item">Progress<span class="rbadge" id="rb-progress"></span></button>
         <button class="rtab" data-rtab="naming" role="tab" title="Naming problems in the selected folders' input files">Naming<span class="rbadge" id="rb-naming"></span></button>
         <button class="rtab" data-rtab="files" role="tab" title="The staging files behind one selected folder">Files<span class="rbadge" id="rb-files"></span></button>
+        <button class="rtab" data-rtab="batches" role="tab" title="Every run of the pipeline, newest first">Batches<span class="rbadge" id="rb-batches"></span></button>
       </div>
 
       <!-- Status: what is outstanding across the WHOLE selection, broken down
            the way the study runs - participants down, up to four seasons
            across. The left grid answers "who needs attention"; this answers
            "what exactly, and act on it". -->
+      <!-- Three regions, fixed in place: the header is always two lines, the
+           matrix scrolls inside what is left, the footer is pinned. Selecting
+           a different set changes the middle one and moves nothing else. -->
       <div class="rpane" id="rpane-status">
-        <div class="sb-bar">
-          <span class="sb-sum" id="sb-summary">Select folders on the left to review their seasons.</span>
-          <span class="sb-head-right" id="sb-head-right"></span>
+        <div class="sb-head">
+          <div class="sb-bar">
+            <span class="sb-sum" id="sb-summary">Select folders on the left to review their seasons.</span>
+            <span class="sb-head-right" id="sb-head-right"></span>
+          </div>
+          <div class="sb-legend" id="sb-legend"></div>
         </div>
         <div class="seasonboard" id="seasonboard"></div>
+        <div class="sb-foot" id="sb-foot"></div>
         <span id="sb-participant" hidden></span>
       </div>
 
@@ -144,6 +172,16 @@
       <div class="rpane hidden" id="rpane-naming">
         <div class="pane-sub">Naming check <span id="flag-scope"></span></div>
         <div class="flaglist" id="flaglist"><div class="muted">Select folders to see naming issues in their input files.</div></div>
+      </div>
+
+      <div class="rpane hidden" id="rpane-batches">
+        <div class="batchbox nohead">
+          <div class="logbox-head batch-head">
+            <span>BATCHES · staging → master</span>
+            <label class="chk" title="Include batches that were removed from the list"><input type="checkbox" id="show-archived" /> show archived</label>
+          </div>
+          <div class="batchlist" id="batchlist"><div class="muted">No batches yet.</div></div>
+        </div>
       </div>
 
       <div class="rpane hidden" id="rpane-files">
@@ -181,6 +219,9 @@
             <button class="btn ghost tiny" id="rec-collapse">collapse</button>
           </span>
         </div>
+        <!-- Season first, participant second: comparing one season across
+             several people is what this panel is for. -->
+        <div class="rec-seasons" id="rec-seasons"></div>
         <div class="rectree" id="rectree"><div class="muted">Select folders on the left to list their recordings.</div></div>
         <div class="device-row" id="device-row" hidden></div>
         <div class="measures" id="measures"><div class="muted">Pick a recording above to see its Step 2 measures.</div></div>
@@ -188,6 +229,8 @@
     </section>
 
     <div class="middle">
+      <div class="splitter" id="split-view" title="Drag to resize the columns · double-click to reset"></div>
+      <span class="seam" aria-hidden="true"></span>
       <button class="btn run" id="agg-btn">AGGREGATE</button>
       <div class="sel-count" id="sel-count-view">0 selected</div>
       <button class="btn run t2send" id="t2-send-btn" title="Check cross-device availability and send the selected folders to T2">SEND TO<br />T2 →</button>
@@ -258,6 +301,16 @@
       <h3>Send to T2</h3>
       <p class="modal-sub" id="t2m-sub"></p>
 
+      <!-- A topic preset fills devices and variables in one go. Participants
+           are never in a preset: who goes into a dataset is chosen fresh each
+           time and recorded on the export. -->
+      <div class="t2m-row">
+        <span class="t2m-lbl">Topic</span>
+        <div class="t2m-topic">
+          <select id="t2m-preset" class="t2m-input"><option value="">— start from scratch —</option></select>
+          <div class="t2m-presetnote muted" id="t2m-presetnote"></div>
+        </div>
+      </div>
       <div class="t2m-row">
         <span class="t2m-lbl">Seasons</span>
         <div class="t2m-chips" id="t2m-seasons"><span class="muted">loading…</span></div>

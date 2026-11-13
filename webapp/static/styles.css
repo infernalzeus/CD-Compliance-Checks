@@ -86,11 +86,18 @@ body {
   /* The right column's minimum is 0, not its content: otherwise a long filename
      in the Naming check / file list widens it, squeezes the left column, and the
      auto-fill grid drops a column - every folder number jumps to a new spot. */
-  grid-template-columns: minmax(320px, 0.85fr) 126px minmax(0, 1.25fr);
-  gap: 16px; padding: 16px; align-items: start;
+  /* --left-w is dragged by the splitter and remembered per browser. */
+  grid-template-columns: minmax(300px, var(--left-w, 0.85fr)) 126px minmax(0, 1.25fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 16px; padding: 16px; align-items: stretch;
+  /* As tall as what is left of the window, so the columns have something
+     to fill instead of floating at the top of an empty page. */
+  min-height: calc(100vh - 92px);
 }
 .panel.hidden { display: none; }
-.left, .right { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+.left, .right { background: var(--panel); border: 1px solid var(--line);
+                border-radius: 12px; padding: 14px;
+                display: flex; flex-direction: column; min-height: 0; }
 .middle { display: flex; flex-direction: column; align-items: center; gap: 10px; padding-top: 40px; }
 
 .panel-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
@@ -103,7 +110,12 @@ body {
    whole column — the file/measure panel below stays visible without page scroll. */
 .grid {
   display: grid; grid-template-columns: repeat(auto-fill, 32px); gap: 5px;
-  user-select: none; max-height: 47vh; overflow-y: auto; align-content: start;
+  /* --grid-h is dragged by the handle under the grid and remembered. */
+  /* Fits the folders it has, up to the height the handle was left at.
+     A fixed height meant a box of mostly nothing for a short selection. */
+  user-select: none; max-height: var(--grid-h, 47vh); overflow-y: auto;
+  align-content: start; flex: 0 1 auto;
+  resize: vertical;
   padding: 4px; background: #0c0e12; border: 1px solid var(--line); border-radius: 8px;
 }
 .cell {
@@ -155,7 +167,9 @@ body {
 .sel-count { color: var(--muted); font-size: 12px; }
 
 /* ---- log ---- */
-.logbox { margin-top: 12px; }
+.logbox { margin-top: 12px; display: flex; flex-direction: column;
+          flex: 1 1 auto; min-height: 96px; }
+.logbox > .log { flex: 1 1 auto; }
 .logbox-head, .filebox-head { font-size: 11px; letter-spacing: 1px; color: var(--muted); margin-bottom: 6px; }
 .log {
   height: 16vh; min-height: 110px; overflow: auto; background: #0c0e12; border: 1px solid var(--line);
@@ -410,7 +424,7 @@ h3.sub { font-size: 12px; color: var(--muted); text-transform: uppercase; letter
 .seg input:checked + span { color: #fff; background: #23324f; border-color: var(--accent); }
 .seg.warn input:checked + span { background: #3a2a12; border-color: #b7791f; color: #ffd98a; }
 .seg input:focus-visible + span { outline: 2px solid var(--accent); outline-offset: 2px; }
-.runmode .chk.debug { margin-left: auto; }
+.runmode .chk.debug, .ab-mode .chk.debug { margin-left: auto; }
 
 .btn.run.preview { background: transparent; border: 2px solid var(--accent); color: #cfe0ff; box-shadow: none; }
 .btn.run.force { background: #b7791f; color: #1a1200; box-shadow: 0 4px 14px rgba(183,121,31,.3); }
@@ -422,14 +436,14 @@ h3.sub { font-size: 12px; color: var(--muted); text-transform: uppercase; letter
 .pill.mode-force { background: #3a2a12; color: #ffd98a; }
 
 /* ---- initials + batches ------------------------------------------------- */
-.runmode .initials { display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+.runmode .initials, .ab-mode .initials { display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
   color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .5px; }
-.runmode .initials input { width: 52px; background: #0c0e12; border: 1px solid var(--line); border-radius: 7px;
+.runmode .initials input, .ab-mode .initials input { width: 52px; background: #0c0e12; border: 1px solid var(--line); border-radius: 7px;
   color: var(--text); padding: 4px 6px; font: 600 12px "Cascadia Code", Consolas, monospace;
   text-transform: uppercase; letter-spacing: 1px; text-align: center; }
-.runmode .initials input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
-.runmode .initials input.need { border-color: var(--flag-skip); box-shadow: 0 0 0 2px rgba(209,73,91,.35); }
-.runmode .chk.debug { margin-left: 8px; }
+.runmode .initials input:focus, .ab-mode .initials input:focus { outline: 2px solid var(--accent); border-color: var(--accent); }
+.runmode .initials input.need, .ab-mode .initials input.need { border-color: var(--flag-skip); box-shadow: 0 0 0 2px rgba(209,73,91,.35); }
+.runmode .chk.debug, .ab-mode .chk.debug { margin-left: 8px; }
 
 .batchbox { margin-top: 12px; }
 .batch-head { display: flex; align-items: center; justify-content: space-between; }
@@ -726,6 +740,8 @@ table.tbl.mtx th, table.tbl.mtx td { padding: 3px 6px; text-align: center; }
 .rbadge.todo { background: #1d3157; color: #9dc0ff; }
 .rbadge.warn { background: #4a3714; color: #ffd98a; }
 .rpane { min-height: 220px; }
+/* The open pane takes the rest of the column rather than leaving it blank. */
+.right > .rpane:not(.hidden) { flex: 1 1 auto; min-height: 0; overflow: auto; }
 .rpane.hidden { display: none; }
 .pane-sub { font-size: 11px; letter-spacing: 1px; color: var(--muted); margin-bottom: 7px; }
 
@@ -915,3 +931,280 @@ table.tbl.mtx th, table.tbl.mtx td { padding: 3px 6px; text-align: center; }
 .cov-sord, .cov-sdate, .cov-starget { color: var(--muted); }
 .cov-sverdict { color: var(--muted); font-size: 10.5px; text-align: right; }
 .cov-srow.bad .cov-sverdict { color: #ffd98a; }
+
+/* ---- scrolling flex columns must not squash their children -----------------
+   A flex item defaults to flex-shrink:1. Inside a column with a max-height and
+   overflow:auto that means the children are COMPRESSED to fit instead of
+   overflowing, so the box reports no overflow, shows no scrollbar, and any
+   child with overflow:hidden silently loses its contents. Observed: an
+   expanded participant needing 324px rendered at 146px with four seasons
+   clipped away. Children of a scrolling column never shrink. */
+.rectree > *,
+.sbm > *,
+.coverage > *,
+.progress-list > *,
+.sb-roll > *,
+.p2-bars > * { flex: 0 0 auto; }
+
+/* With scrolling restored these can afford to be taller. */
+.rectree { max-height: 46vh; }
+.sbm { max-height: 46vh; }
+.rec-sub { font-size: 10.5px; color: var(--muted); text-transform: none; }
+
+/* ---- T2: topic presets ----------------------------------------------------- */
+.t2m-topic { flex: 1; min-width: 0; }
+.t2m-presetnote { font-size: 11px; margin-top: 6px; line-height: 1.5; }
+.t2m-presetnote .bad { color: #ff9b9b; }
+.t2m-q { font-style: italic; margin-bottom: 4px; }
+.t2m-missing { margin-top: 5px; }
+.t2m-missing summary { cursor: pointer; color: var(--orange); }
+.t2m-missing ul { margin: 5px 0 0; padding-left: 18px; }
+.t2m-missing li { margin: 2px 0; }
+.batch-head #report-btn { margin-left: auto; }
+.logline a { color: #9dc0ff; }
+
+/* ---- Panel 1 cell: coverage ticks -------------------------------------------
+   The colour says whether we processed what is there; these say whether the
+   data is there at all. One tick per expected device, along the bottom of the
+   cell, so the two readings cannot be mistaken for each other. */
+
+
+/* The legend now explains two scales, so it reads as two groups. */
+.legend.legend-2 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 13px; }
+.legend .lg-head { font-size: 10px; letter-spacing: .7px; text-transform: uppercase;
+                   color: var(--muted); width: 100%; margin-top: 4px; }
+.legend .lg-head:first-child { margin-top: 0; }
+.legend .lg-note { width: 100%; color: var(--muted); font-size: 10.5px; opacity: .85; }
+.legend .sw.cov-dot { width: 10px; height: 5px; border-radius: 1px; background: #cfd5e0; }
+.legend .sw.cov-dot.off { background: transparent; box-shadow: inset 0 0 0 1px #4a5160; }
+.flagbtn.has, #incomplete-filter.has { color: var(--orange); border-color: #5a4418; }
+#incomplete-filter.active, .flagbtn.active { background: #232834; color: var(--text); }
+
+/* ---- landing page: no filter animation while a list scrolls beneath it ------
+   `filter: brightness()` on an infinite loop repaints every frame and, on a
+   mixed-refresh-rate desktop, drags the scrolling list with it. Opacity alone
+   is composited, looks the same, and costs nothing. */
+.mark-glow .mark { animation-name: mark-breathe-opacity; }
+@keyframes mark-breathe-opacity {
+  0%, 100% { opacity: .55; }
+  50%      { opacity: 1; }
+}
+/* Keep the scrolling list's repaints inside the list, not across the panel's
+   16px radius and 70px shadow. */
+.comp-list { contain: paint; overscroll-behavior: contain; }
+.startup-box { will-change: auto; }
+
+/* ---- Panel 1 cell -----------------------------------------------------------
+   Five states that have to be told apart at 32px, so each differs in BOTH
+   fill and border rather than hue alone. The fills run as a lightness ladder
+   — black, dark, mid, amber, white — and the border carries the reason:
+   dashed = nothing to work with, dotted amber = data short, solid = actionable.
+
+     black           no data at all
+     dark + amber    data incomplete — an expected device is missing
+     grey            complete, not processed yet       (ready)
+     amber           complete, partly processed
+     white + green   complete and processed            (done)
+*/
+.cell { position: relative; padding-bottom: 5px; border-width: 2px; border-style: solid; }
+
+.cell.tone-empty      { background: #05070a; color: #4e5666;
+                        border-color: #272c36; border-style: dashed; }
+.cell.tone-incomplete { background: #241a0d; color: #f0d9b0;
+                        border-color: var(--orange); border-style: dotted; }
+.cell.tone-ready      { background: #78808f; color: #11151c; border-color: #aab2c0; }
+.cell.tone-running    { background: var(--orange); color: #241400; border-color: #ffd98a; }
+.cell.tone-done       { background: var(--white); color: #0c0f14; border-color: var(--green); }
+
+.cell.selected { outline: 3px solid var(--accent); outline-offset: 1px; }
+
+/* One mark per SEASON along the bottom edge, at full contrast against
+   whichever fill the cell has. Four marks, always four.
+
+   Only three things to say, because only three are true: this season is
+   complete, this season has data and is short of some, or there is nothing
+   here. "Nothing here" is the normal state of most folders - the study
+   pre-creates them - so it is drawn quietly and the cell's colour carries it. */
+.cell .cov { position: absolute; left: 0; right: 0; bottom: 2px;
+             display: flex; gap: 2px; justify-content: center; pointer-events: none; }
+.cell .cov i { width: 6px; height: 3px; border-radius: 1px; display: block;
+               background: currentColor; }
+.cell.tone-done .cov, .cell.tone-running .cov, .cell.tone-ready .cov { color: #11151c; }
+.cell.tone-incomplete .cov, .cell.tone-empty .cov { color: #ffffff; }
+/* data here, and short of some: the one thing worth a colour */
+.cell .cov i.s-short  { background: var(--orange); box-shadow: 0 0 0 .6px #000; }
+/* nothing in this season - no judgement, the cell colour already said it */
+.cell .cov i.s-off    { background: transparent; opacity: .35;
+                        box-shadow: inset 0 0 0 .6px currentColor; }
+.cell .cov i.done     { box-shadow: 0 0 0 .6px var(--green); }
+.legend .sw.cov-dot.s-full  { background: #cfd5e0; }
+.legend .sw.cov-dot.s-short { background: var(--orange); }
+.legend .sw.cov-dot.s-off   { background: transparent; opacity: .5;
+                              box-shadow: inset 0 0 0 1px #4a5160; }
+
+.grid.incomplete-filter .cell:not(.tone-incomplete) { opacity: .18; }
+.grid.ready-filter .cell:not(.tone-ready):not(.tone-running) { opacity: .18; }
+
+/* The legend swatches carry the same fill AND border, so the key matches. */
+.legend .sw { border: 2px solid transparent; }
+.legend .sw.tone-empty      { background: #05070a; border-color: #272c36; border-style: dashed; }
+.legend .sw.tone-incomplete { background: #241a0d; border-color: var(--orange); border-style: dotted; }
+.legend .sw.tone-ready      { background: #78808f; border-color: #aab2c0; }
+.legend .sw.tone-running    { background: var(--orange); border-color: #ffd98a; }
+.legend .sw.tone-done       { background: var(--white); border-color: var(--green); }
+.legend .sw.cov-dot { width: 11px; height: 5px; border: none; background: #cfd5e0; }
+.legend .sw.cov-dot.off { background: transparent; box-shadow: inset 0 0 0 1px #6c7585; }
+
+#ready-filter.has { color: #7ee2a0; border-color: #1f5133; }
+#ready-filter.active { background: #232834; color: var(--text); }
+
+/* ---- draggable panel splitter ----------------------------------------------
+   The columns were fixed fractions, so a long participant list meant scrolling
+   a small box while half the window sat empty. The splitter sits in the middle
+   column, above the RUN button, and what you drag is remembered. */
+.middle { position: relative; align-self: stretch; }
+/* The seam: three hairlines down the centre of the gap, as flex items ABOVE and
+   BELOW the column's controls. Drawn this way there is no band in which both
+   the line and a button exist, so nothing is ever behind anything. */
+.middle > .seam {
+  flex: 1 1 auto; min-height: 0; width: 9px; align-self: center;
+  filter: blur(.35px); pointer-events: none;
+  background-image: repeating-linear-gradient(to right,
+                      rgba(255, 255, 255, .15) 0 1px, transparent 1px 4px);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 22px,
+                                      #000 calc(100% - 22px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 22px,
+                              #000 calc(100% - 22px), transparent 100%);
+}
+/* The drag target: full height, invisible, and behind the controls. */
+.splitter { position: absolute; top: 0; bottom: 0; left: 50%; width: 18px;
+            transform: translateX(-50%); cursor: col-resize; z-index: 1; }
+.middle:hover > .seam, .middle.dragging > .seam {
+  filter: none;
+  background-image: repeating-linear-gradient(to right,
+                      rgba(79, 140, 255, .5) 0 1px, transparent 1px 4px);
+}
+.middle > *:not(.splitter):not(.seam) { position: relative; z-index: 2; }
+body.col-resizing { cursor: col-resize; user-select: none; }
+/* The grid's own corner grip, for height. */
+.grid::-webkit-resizer { background: var(--panel2); }
+.grid-reset { font-size: 10.5px; color: var(--muted); background: none; border: none;
+              cursor: pointer; padding: 0; margin-left: auto; }
+.grid-reset:hover { color: var(--accent); }
+
+/* ---- batch list: one line per run ------------------------------------------
+   Stage, when, who, scale, what happened, outcome. The batch id is long and
+   only needed when quoting a record, so it lives in the tooltip. */
+.batch .b-line { display: flex; align-items: baseline; gap: 9px; font-size: 11.5px;
+                 white-space: nowrap; overflow: hidden; }
+.b-stage { font-size: 9.5px; font-weight: 700; letter-spacing: .6px; padding: 1px 6px;
+           border-radius: 4px; flex: none; }
+.b-stage.pre { background: #1d2636; color: #9dc0ff; }
+.b-stage.t2  { background: #241c38; color: #d9c8ff; }
+.b-when { color: var(--muted); flex: none; font-variant-numeric: tabular-nums; }
+.b-who  { color: var(--text); font-weight: 600; flex: none; }
+.b-n    { color: var(--muted); flex: none; }
+.b-what { color: var(--muted); overflow: hidden; text-overflow: ellipsis; }
+.batch .b-status { margin-left: auto; flex: none; }
+.batch { position: relative; padding: 6px 28px 6px 10px; }
+
+/* ---- a season short of a device --------------------------------------------
+   The season light reports processing only, so a folder that exists and holds
+   one device of four used to look exactly like a finished one. The hole is now
+   marked on the cell and counted in the summary. */
+.sbm-cell.has-gap { border-color: #7a5a1e; box-shadow: inset 0 0 0 1px #4a3715; }
+.sbm-flag { color: #ffc14d; font-size: 10px; font-weight: 700; margin-left: 3px; }
+.sbm-gap { display: block; font-size: 9.5px; line-height: 1.25; color: #ffc14d;
+           white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-gapchip { background: #2a1f0c; color: #ffc14d; border: 1px solid #7a5a1e;
+              border-radius: 999px; font: inherit; font-size: 11px;
+              padding: 1px 8px; cursor: pointer; }
+.sb-gapchip:hover { border-color: #ffc14d; }
+.sb-gapchip.on { background: #ffc14d; color: #231802; border-color: #ffc14d; }
+.btn.tiny.warnbtn, .btn.ghost.tiny.warnbtn { color: #ffc14d; border-color: #5c451a; }
+.btn.ghost.tiny.warnbtn:hover { border-color: #ffc14d; }
+.sb-legend .lg.gapmark { background: none; border: none; color: #ffc14d;
+                         font-size: 10px; font-style: normal; width: auto; }
+.rbadge.warn { background: #2a1f0c; color: #ffc14d; border-color: #7a5a1e; }
+
+/* ---- naming counts are the filter ----------------------------------------- */
+.flag-counts .fcount { cursor: pointer; font: inherit; font-size: 11px;
+                       border: 1px solid transparent; }
+.flag-counts .fcount.zero { cursor: default; }
+.flag-counts .fcount.on { outline: 1px solid currentColor; outline-offset: 1px; }
+.flag-counts .fcount.showall { background: transparent; border: 1px dashed var(--line);
+                               color: var(--muted); border-radius: 999px;
+                               padding: 1px 9px; }
+.flag-counts .fcount.showall:hover { color: var(--text); border-color: var(--accent); }
+
+/* ---- things the right-hand panel gained -----------------------------------
+   A season can be fully processed and still short of a device. That is a fair
+   thing to do deliberately; it just must not look like completion. */
+.sbm-cell.short-done { border-left-color: var(--orange); background: #231d12; }
+.sbm-gap.dup { color: #ff9f9f; }
+.plan-short { display: block; margin-top: 4px; color: #ffc14d; font-weight: 600; }
+
+/* The batch list is a tab now, so it fills the pane instead of a fixed box. */
+#rpane-batches .batchbox { margin: 0; }
+#rpane-batches .batchlist { max-height: none; }
+#rpane-batches .logbox-head { margin-top: 0; }
+
+/* The legend sits between the grid and the log and should not stretch. */
+.left > .legend { flex: 0 0 auto; }
+.left > .grid { flex: 0 1 auto; }
+
+/* ---- the action bar -------------------------------------------------------
+   Everything that does something is here, in reading order: what you are
+   working on, how it will run, and then the one button that runs it. The
+   columns below only select and review. */
+.actionbar {
+  grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center;
+  gap: 10px 18px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 10px 14px;
+}
+.ab-g { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ab-lbl { font-size: 10px; letter-spacing: 1px; text-transform: uppercase;
+          color: var(--muted); margin-right: 2px; }
+.ab-go { margin-left: auto; gap: 10px; }
+.ab-mode .initials, .ab-mode .chk.debug { margin-left: 4px; }
+.actionbar .btn.run {
+  width: auto; height: auto; padding: 9px 22px; font-size: 13px;
+  letter-spacing: .4px; border-radius: 10px; line-height: 1.1;
+}
+.ab-plan { flex: 1 1 100%; width: auto; text-align: left; font-size: 11.5px;
+           color: #c9d0dc; border-top: 1px solid var(--line); padding-top: 8px;
+           margin: 0; }
+.ab-plan .plan-warn { display: inline; margin-left: 6px; }
+.actionbar .sel-count { margin-left: 4px; }
+.actionbar .initials input { width: 46px; }
+@media (max-width: 1180px) { .ab-go { margin-left: 0; } }
+
+/* The middle column now holds only the divider. */
+.middle { padding-top: 0; }
+
+/* ---- the status pane holds still ------------------------------------------
+   Three regions. The header is a fixed two lines so a longer summary or a new
+   chip cannot push the matrix down; the matrix scrolls inside what is left;
+   the footer is pinned, so the device chips and the run plan stay where your
+   hand expects them however many rows the selection has. */
+#rpane-status { display: flex; flex-direction: column; min-height: 0; }
+#rpane-status > .sb-head { flex: 0 0 auto; }
+#rpane-status > .seasonboard { flex: 1 1 auto; min-height: 120px; overflow: auto; }
+#rpane-status > .sb-foot { flex: 0 0 auto; margin-top: 0; }
+.sb-bar { min-height: 26px; flex-wrap: nowrap; gap: 10px; }
+.sb-sum { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sb-head-right { display: flex; gap: 6px; flex: 0 0 auto; white-space: nowrap; }
+#rpane-status > .sb-head > .sb-legend { min-height: 20px; margin: 4px 0 6px;
+                                        padding-top: 0; border-top: none; }
+
+/* ---- Panel 2: season first ------------------------------------------------ */
+.rec-seasons { display: flex; flex-wrap: wrap; gap: 6px; margin: 2px 0 8px; }
+.rchip { background: var(--panel2); border: 1px solid var(--line); color: var(--muted);
+         border-radius: 999px; font: inherit; font-size: 11.5px; padding: 3px 11px;
+         cursor: pointer; display: inline-flex; align-items: baseline; gap: 6px; }
+.rchip:hover { border-color: var(--accent); color: var(--text); }
+.rchip i { font-style: normal; font-size: 10px; opacity: .75; }
+.rchip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.rchip.on i { opacity: .9; }
+.rec-sn { display: inline-block; min-width: 20px; margin-right: 7px; font-weight: 700;
+          font-size: 10px; color: var(--accent); }

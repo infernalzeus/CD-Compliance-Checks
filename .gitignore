@@ -1,6 +1,13 @@
-# Run records: runs/batches/ holds PUBLIC stripped batch records and is committed.
-# Everything identifying (participants, paths, events) stays in runs/_private/.
-runs/_private/
+# Run records are LOCAL. They describe what this machine processed and when -
+# operational data about a study, not part of the program - so none of it is
+# committed: not the stripped public copies, not the private detail, and not
+# the compliance reports, which name participants.
+runs/*
+!runs/README.md
+!runs/.gitkeep
+!runs/batches/
+runs/batches/*
+!runs/batches/.gitkeep
 
 # Local machine config (keep config.example.yaml in git; config.yaml is local).
 # Comment this out if you want to version your active config.
@@ -29,6 +36,7 @@ launcher-log.txt
 # local agent session config (per-machine, not part of the program)
 .claude/
 
-# Local-only working material: plans, drafts, scratch notes, anything that is
-# about building the tool rather than part of it. Plans do not go on GitHub.
+# Local-only working material: plans (plan.html included), drafts, scratch
+# notes - anything about building the tool rather than part of it. Plans do not
+# go on GitHub.
 _local/

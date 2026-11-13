@@ -42,6 +42,7 @@ def tool_specs(config) -> list[tuple[str, str, Path]]:
         ("actigraphy-sleep-metrics", config.tools.sleep_metrics_repo_url, config.tools.sleep_metrics_repo),
         ("luminosity-metrics", config.tools.luminosity_repo_url, config.tools.luminosity_repo),
         ("expiwell-metrics", config.tools.expiwell_repo_url, config.tools.expiwell_repo),
+        ("qualtrics-preprocessing", config.tools.qualtrics_repo_url, config.tools.qualtrics_repo),
     ]
 
 

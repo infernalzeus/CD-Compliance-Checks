@@ -60,6 +60,92 @@ $$(".tab").forEach((t) => t.addEventListener("click", () => {
   if (which === "t2") loadT2Selections();
 }));
 
+// --------------------------------------------------- resizable panel layout
+/* The three columns were fixed fractions and the grid a fixed 47vh, so a long
+   participant list meant scrolling a small box while half the window sat
+   empty. Both are now dragged and both are remembered, per browser. */
+const LAYOUT_KEY = "cdcc.layout.v1";
+
+/* Reading the stored layout and APPLYING it are two different things, and
+   conflating them is what made the splitter snap back: saveLayout() called
+   loadLayout() to merge, loadLayout() re-applied the old width, and the drag
+   was undone the instant the mouse came up. */
+function readLayout() {
+  try { return JSON.parse(localStorage.getItem(LAYOUT_KEY) || "{}"); } catch { return {}; }
+}
+function applyLayout(saved) {
+  const root = document.documentElement.style;
+  if (saved.leftW) root.setProperty("--left-w", saved.leftW);
+  else root.removeProperty("--left-w");
+  if (saved.gridH) root.setProperty("--grid-h", saved.gridH);
+  else root.removeProperty("--grid-h");
+}
+function saveLayout(patch) {
+  const next = { ...readLayout(), ...patch };
+  Object.keys(next).forEach((k) => { if (next[k] == null) delete next[k]; });
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+  return next;
+}
+applyLayout(readLayout());
+
+function wireSplitter(id, panelId) {
+  const handle = $(id);
+  if (!handle) return;
+  const panel = $(panelId);
+  let startX = 0, startW = 0;
+  const onMove = (e) => {
+    // Clamp so neither column can be dragged out of existence.
+    const total = panel.getBoundingClientRect().width;
+    const w = Math.max(300, Math.min(total - 420, startW + (e.clientX - startX)));
+    document.documentElement.style.setProperty("--left-w", w + "px");
+  };
+  const onUp = () => {
+    document.removeEventListener("mousemove", onMove);
+    document.removeEventListener("mouseup", onUp);
+    document.body.classList.remove("col-resizing");
+    handle.classList.remove("dragging");
+    handle.parentElement.classList.remove("dragging");
+    // Save what is on screen. Nothing re-applies anything here, which is the
+    // whole point: the column stays exactly where it was let go.
+    saveLayout({ leftW: document.documentElement.style.getPropertyValue("--left-w").trim() || null });
+  };
+  handle.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    startX = e.clientX;
+    startW = $(".left", panel).getBoundingClientRect().width;
+    handle.classList.add("dragging");
+    handle.parentElement.classList.add("dragging");
+    document.body.classList.add("col-resizing");
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+  handle.addEventListener("dblclick", () => {
+    document.documentElement.style.removeProperty("--left-w");
+    saveLayout({ leftW: null });
+    logLine("Column width reset.", "");
+  });
+}
+
+/* The grid itself is `resize: vertical`; remember where it was let go. */
+function watchGridHeight(id) {
+  const grid = $(id);
+  if (!grid || !window.ResizeObserver) return;
+  let timer = null;
+  new ResizeObserver(() => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const h = grid.style.height;
+      if (!h) return;
+      // The grid's own height is a maximum now - it shrinks to the folders it
+      // has - so the dragged value has to go to the variable, live, or the
+      // next drag would be clamped by the old one.
+      document.documentElement.style.setProperty("--grid-h", h);
+      grid.style.height = "";
+      saveLayout({ gridH: h });
+    }, 400);
+  }).observe(grid);
+}
+
 // ------------------------------------------------------------------ grid controller
 class GridController {
   constructor(mountId, countId, onSelectionChange) {
@@ -132,24 +218,86 @@ class GridController {
   }
   reload() { if (this._url) this.load(this._url); }
   setUrl(u) { this._url = u; return this; }
-  flagged() { return this.cells.filter((c) => c.flags && (c.flags.skipped || c.flags.warning)); }
+  //: Folders a run cannot fully handle - skipped files only. Naming warnings
+  //: are reviewed on the right, not filtered for here.
+  flagged() { return this.cells.filter((c) => c.flags && c.flags.skipped); }
+  //: Folders missing an expected device outright. A season short of one is a
+  //: different question and belongs to the right-hand panel, not this filter.
+  incomplete() { return this.cells.filter((c) => (c.devices_missing || []).length); }
+  //: Folders with every expected device present - the ones a run can do in full.
+  complete() { return this.cells.filter((c) => c.data_state === "full"); }
+  //: Complete AND with something still to process: what RUN is actually for.
+  readyToRun() {
+    return this.cells.filter((c) => c.data_state === "full" && c.state !== "complete");
+  }
+
+  //: The colour the user reads. Completeness of the DATA comes first, because
+  //: "everything we found is processed" means nothing if we found one device
+  //: of four. Returns one of: empty | incomplete | ready | running | done.
+  static cellTone(c) {
+    if (!c.n_devices_expected) return c.state;        // Panel 2 keeps its own scale
+    const data = c.data_state || "none";
+    if (data === "none") return "empty";              // black - nothing here at all
+    if (data !== "full") return "incomplete";         // amber-edged - a device is missing
+    if (c.state === "complete") return "done";        // white - all there, all processed
+    if (c.state === "partial") return "running";      // orange - all there, partly done
+    return "ready";                                   // grey - all there, nothing done
+  }
 
   _makeCell(c) {
-    const cell = el("div", `cell ${c.state}`, c.suffix);
+    const tone = GridController.cellTone(c);
+    const cell = el("div", `cell ${c.state} tone-${tone}`, c.suffix);
     cell.dataset.participant = c.participant;
-    cell.title = `${c.participant} — ${c.state} (${c.done ?? 0}/${c.total ?? 0})`;
-    // Naming flags (Panel 1 only): a corner badge for problems that lose or
-    // misidentify data. Info-level drift is left to the Naming check list.
-    const f = c.flags;
-    if (f && (f.skipped || f.warning)) {
-      const sev = f.skipped ? "skipped" : "warning";
-      cell.classList.add("has-flag");
-      cell.appendChild(el("span", `fbadge ${sev}`, f.skipped ? "✕" : "!"));
-      const parts = [];
-      if (f.skipped) parts.push(`${f.skipped} file(s) skipped`);
-      if (f.warning) parts.push(`${f.warning} naming warning(s)`);
-      cell.title += ` — ${parts.join(", ")}`;
+    const TONE = { empty: "no input", incomplete: "INCOMPLETE DATA",
+                   ready: "ready to process", running: "partly processed",
+                   done: "complete and processed" };
+    const lines = [`${c.participant} — ${TONE[tone] || c.state}`,
+                   `processing: ${c.done ?? 0}/${c.total ?? 0} item(s) done`];
+
+    // The colour answers "did we process what is here". The marks answer "which
+    // seasons have data at all" - four of them, one per season, because devices
+    // will keep being added and a cell cannot grow a mark each time.
+    // Three states, because three is all that is true: complete, started and
+    // short, or nothing here. Most folders in the study are scaffolding - an
+    // empty season folder and nothing else - so "nothing here" is the normal
+    // case and the cell's own colour already reports it.
+    const SLOT = { full: "all devices", partial: "short of a device",
+                   none: "nothing in it yet", absent: "no folder yet" };
+    const MARK = { full: "s-full", partial: "s-short", none: "s-off", absent: "s-off" };
+    if (c.n_season_slots) {
+      const strip = el("span", "cov");
+      (c.season_slots || []).forEach((sl) => {
+        const i = el("i", `${MARK[sl.data] || "s-off"}` +
+                        (sl.processing === "complete" ? " done" : ""));
+        strip.appendChild(i);
+      });
+      cell.appendChild(strip);
+      cell.classList.add("data-" + (c.data_state || "none"));
+      const have = (c.season_slots || []).filter((sl) => sl.season).length;
+      lines.push(`seasons: ${have} of ${c.n_season_slots}`);
+      (c.season_slots || []).forEach((sl) => {
+        if (!sl.season) { lines.push(`  S${sl.n} — no folder yet`); return; }
+        lines.push(`  S${sl.n} ${sl.label} — ${SLOT[sl.data] || sl.data}` +
+          (sl.missing.length ? ` (no ${sl.missing.join(", ")})` : "") +
+          (sl.processing === "complete" ? " · processed" :
+           sl.processing === "partial" ? " · part processed" : "") +
+          (sl.duplicate ? " · ⚠ T2 would merge this with another season" : ""));
+      });
+      if (c.devices_missing && c.devices_missing.length) {
+        lines.push(`no ${c.devices_missing.join(", ")} anywhere in this folder`);
+      }
     }
+
+    // A badge ONLY for data we cannot process. Naming drift is a review task,
+    // not a blocker, and lives in the Naming tab on the right.
+    const f = c.flags;
+    if (f && f.skipped) {
+      cell.classList.add("has-flag");
+      cell.appendChild(el("span", "fbadge skipped", "\u2715"));
+      lines.push(`${f.skipped} file(s) cannot be processed`);
+    }
+    if (f && f.warning) lines.push(`${f.warning} naming warning(s) — see the Naming tab`);
+    cell.title = lines.join("\n");
     if (this.selected.has(c.participant)) cell.classList.add("selected");
     cell.addEventListener("mousedown", (e) => {
       e.preventDefault();
@@ -173,6 +321,10 @@ class GridController {
   }
 
   _apply(participant, cell) {
+    // Touching the grid by hand means the selection is no longer the filter's,
+    // so the dimming comes off rather than hanging around over a set that has
+    // changed underneath it.
+    if (typeof clearFilter === "function") clearFilter();
     if (this.dragMode === "add") this.selected.add(participant);
     else this.selected.delete(participant);
     cell.classList.toggle("selected", this.selected.has(participant));
@@ -307,29 +459,79 @@ runGrid.load("/api/panel1/grid-stream");
 // ---- naming flags ----------------------------------------------------------
 const SEV_ORDER = { skipped: 0, warning: 1, info: 2 };
 const SEV_LABEL = { skipped: "✕ skipped", warning: "! warning", info: "i info" };
-let flagFilterOn = false;
+/* One filter at a time. Each used to be an independent toggle that painted a
+   dimming class onto the grid and had no way back: Clear cleared the selection
+   but not the filter, clicking cells by hand left it on, and a second filter
+   simply added its class on top of the first. */
+const FILTERS = {
+  blocked:    { btn: "#flag-filter", cls: "flag-filter",
+                pick: () => runGrid.flagged(),
+                said: (n) => `Showing ${n} folder(s) with files that cannot be processed.` },
+  incomplete: { btn: "#incomplete-filter", cls: "incomplete-filter",
+                pick: () => runGrid.incomplete(),
+                said: (n) => `Showing ${n} folder(s) missing an expected device.` },
+  ready:      { btn: "#ready-filter", cls: "ready-filter",
+                pick: () => runGrid.readyToRun(),
+                said: (n) => `Showing ${n} folder(s) ready to process.` },
+};
+let activeFilter = null;
 
-function updateFlagCount() {
-  const n = runGrid.flagged().length;
-  $("#flag-count").textContent = n ? String(n) : "";
-  $("#flag-filter").classList.toggle("has", n > 0);
-  $("#flag-filter").title = n
-    ? `${n} folder(s) have naming problems that skip or misidentify files. Click to show and select them.`
-    : "No naming problems that skip or misidentify files.";
+function clearFilter() {
+  if (!activeFilter) return;
+  const grid = $("#grid-run");
+  Object.values(FILTERS).forEach((f) => {
+    grid.classList.remove(f.cls);
+    $(f.btn).classList.remove("active");
+  });
+  activeFilter = null;
 }
 
-$("#flag-filter").addEventListener("click", () => {
-  flagFilterOn = !flagFilterOn;
-  $("#grid-run").classList.toggle("flag-filter", flagFilterOn);
-  $("#flag-filter").classList.toggle("active", flagFilterOn);
-  if (flagFilterOn) {
-    // Select exactly the flagged folders, so CHECK / RUN act on them directly.
-    runGrid.selected = new Set(runGrid.flagged().map((c) => c.participant));
-    runGrid.render();
-    runGrid._changed();
-    logLine(`Showing ${runGrid.selected.size} flagged folder(s).`, "warning");
+function setFilter(key) {
+  const grid = $("#grid-run");
+  const same = activeFilter === key;
+  clearFilter();
+  if (same) { runGrid.render(); return; }   // clicking the lit one turns it off
+  const f = FILTERS[key];
+  const hits = f.pick();
+  if (!hits.length) {
+    logLine("Nothing matches that filter right now.", "");
+    return;
   }
-});
+  activeFilter = key;
+  grid.classList.add(f.cls);
+  $(f.btn).classList.add("active");
+  runGrid.selected = new Set(hits.map((c) => c.participant));
+  runGrid.render();
+  runGrid._changed();
+  logLine(f.said(runGrid.selected.size), key === "ready" ? "ok" : "warning");
+}
+
+Object.keys(FILTERS).forEach((key) =>
+  $(FILTERS[key].btn).addEventListener("click", () => setFilter(key)));
+
+function updateFlagCount() {
+  const counts = {
+    blocked: runGrid.flagged().length,
+    incomplete: runGrid.incomplete().length,
+    ready: runGrid.readyToRun().length,
+  };
+  const words = {
+    blocked: [`%n folder(s) hold files the pipeline cannot process. Click to select them.`,
+              "Nothing is being skipped \u2014 every input file can be processed."],
+    incomplete: [`%n folder(s) are missing at least one expected device. Click to select them.`,
+                 "Every folder has all the expected devices."],
+    ready: [`%n folder(s) have every expected device and still have something to process.`,
+            "Nothing is both complete and unprocessed."],
+  };
+  Object.entries(counts).forEach(([key, n]) => {
+    const btn = $(FILTERS[key].btn);
+    $(FILTERS[key].btn.replace("-filter", "-count")).textContent = n ? String(n) : "";
+    btn.classList.toggle("has", n > 0);
+    btn.title = n ? words[key][0].replace("%n", String(n)) : words[key][1];
+  });
+  // A filter whose folders no longer match it has nothing left to show.
+  if (activeFilter && !counts[activeFilter]) clearFilter();
+}
 
 let flagReq = 0;
 async function loadFlags(participants) {
@@ -377,19 +579,57 @@ const STATUS_TEXT = {
 
 // Expected-vs-current for one participant: season -> device -> each file the
 // pipeline uses, with the convention (from the naming sheet) shown above it.
+/* Narrowed to one severity, or null for the whole convention view. */
+let convOnly = null;
+const convHits = (notes, sev) => (notes || []).some((n) => n.severity === sev);
+
 function renderConventions(box, view) {
   box.innerHTML = "";
   if (!view || !view.exists) { box.appendChild(el("div", "muted", "Participant folder not found.")); return; }
   const c = view.counts || {};
   const head = el("div", "flag-counts");
-  ["skipped", "warning", "info"].forEach((k) =>
-    head.appendChild(el("span", `fcount ${k} ${c[k] ? "" : "zero"}`, `${SEV_LABEL[k]} <b>${c[k] || 0}</b>`)));
+  ["skipped", "warning", "info"].forEach((k) => {
+    const chip = el("button",
+      `fcount ${k} ${c[k] ? "" : "zero"} ${convOnly === k ? "on" : ""}`,
+      `${SEV_LABEL[k]} <b>${c[k] || 0}</b>`);
+    chip.title = c[k]
+      ? (convOnly === k ? "Show every file again" : `Show only what is ${k}`)
+      : `No ${k} problems in this folder`;
+    chip.addEventListener("click", () => {
+      if (!c[k]) return;
+      convOnly = convOnly === k ? null : k;
+      renderConventions(box, view);
+    });
+    head.appendChild(chip);
+  });
+  if (convOnly) {
+    const all = el("button", "fcount showall", "show all files");
+    all.addEventListener("click", () => { convOnly = null; renderConventions(box, view); });
+    head.appendChild(all);
+  }
   box.appendChild(head);
   if (!view.seasons.length) {
     box.appendChild(el("div", "muted", "No files here that the pipeline processes."));
     return;
   }
-  view.seasons.forEach((sn) => {
+
+  // Keep only the branches that hold the severity being asked about, so the
+  // pane is the answer rather than a list to search.
+  let seasons = view.seasons;
+  if (convOnly) {
+    seasons = view.seasons.map((sn) => {
+      const devices = sn.devices.map((dv) => Object.assign({}, dv, {
+        files: dv.files.filter((f) => convHits(f.reasons, convOnly)),
+      })).filter((dv) => dv.files.length || convHits(dv.notes, convOnly));
+      return Object.assign({}, sn, { devices });
+    }).filter((sn) => sn.devices.length || convHits(sn.notes, convOnly));
+    if (!seasons.length) {
+      box.appendChild(el("div", "muted", `Nothing ${convOnly} in this folder.`));
+      return;
+    }
+  }
+
+  seasons.forEach((sn) => {
     const sb = el("div", "conv-season");
     sb.appendChild(el("div", "conv-shead",
       `<span class="cstat ${sn.status}">${STATUS_ICON[sn.status]}</span>` +
@@ -423,19 +663,48 @@ function renderConventions(box, view) {
   });
 }
 
+/* Which severity the naming pane is narrowed to, or null for all of them.
+   The counts along the top were a read-out; with a long list the thing you
+   want is to see one kind of problem and nothing else. */
+let namingOnly = null;
+
 function renderFlagList(box, data, { showInfo = false, limit = 200 } = {}) {
   box.innerHTML = "";
   if (!data) { box.appendChild(el("div", "muted", "Could not run the naming check.")); return; }
   const c = data.counts || {};
   const head = el("div", "flag-counts");
-  ["skipped", "warning", "info"].forEach((k) =>
-    head.appendChild(el("span", `fcount ${k} ${c[k] ? "" : "zero"}`, `${SEV_LABEL[k]} <b>${c[k] || 0}</b>`)));
+  ["skipped", "warning", "info"].forEach((k) => {
+    const chip = el("button",
+      `fcount ${k} ${c[k] ? "" : "zero"} ${namingOnly === k ? "on" : ""}`,
+      `${SEV_LABEL[k]} <b>${c[k] || 0}</b>`);
+    chip.title = c[k]
+      ? (namingOnly === k ? "Show every severity again" : `Show only the ${k} ones, at the top`)
+      : `No ${k} problems here`;
+    chip.addEventListener("click", () => {
+      if (!c[k]) return;
+      namingOnly = namingOnly === k ? null : k;
+      renderFlagList(box, data, { showInfo: showInfo || namingOnly === "info", limit });
+    });
+    head.appendChild(chip);
+  });
+  if (namingOnly) {
+    const all = el("button", "fcount showall", "show all");
+    all.addEventListener("click", () => {
+      namingOnly = null;
+      renderFlagList(box, data, { showInfo, limit });
+    });
+    head.appendChild(all);
+  }
   box.appendChild(head);
 
   const flags = (data.flags || [])
-    .filter((f) => showInfo || f.severity !== "info")
+    .filter((f) => (namingOnly ? f.severity === namingOnly : showInfo || f.severity !== "info"))
     .sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity]
       || a.participant.localeCompare(b.participant) || a.season.localeCompare(b.season));
+  if (!flags.length && namingOnly) {
+    box.appendChild(el("div", "muted", `No ${namingOnly} problems in this selection.`));
+    return;
+  }
   if (!flags.length) {
     box.appendChild(el("div", "muted", (c.info && !showInfo)
       ? `No problems that skip or misidentify files. ${c.info} cosmetic naming note(s) — select one folder to see them.`
@@ -458,17 +727,76 @@ function renderFlagList(box, data, { showInfo = false, limit = 200 } = {}) {
   if (flags.length > limit) box.appendChild(el("div", "muted", `…and ${flags.length - limit} more.`));
 }
 
-$("#clear-run").addEventListener("click", () => runGrid.clear());
+$("#clear-run").addEventListener("click", () => {
+  // Clear means clear: the selection AND whatever filter dimmed the grid.
+  clearFilter();
+  seasonBoard.picked = new Set();
+  runGrid.clear();
+});
+wireSplitter("#split-run", "#panel-run");
+wireSplitter("#split-view", "#panel-view");
+watchGridHeight("#grid-run");
+watchGridHeight("#grid-view");
+
+/* -- Panel 1: the compliance report ------------------------------------------
+   Per-item verdicts the dashboard already had. What it did not have was the
+   thing you send to someone: across these folders, where does the study stand
+   and what is still outstanding. Reports name participants, so they are written
+   to the private side of runs/ and served back from there - never into the
+   public stripped batch records. */
+$("#report-btn").addEventListener("click", buildComplianceReport);
+
+async function buildComplianceReport() {
+  const participants = runGrid.list();
+  const btn = $("#report-btn");
+  if (!participants.length) {
+    logLine("Select the folders to report on first.", "warning");
+    return;
+  }
+  const was = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "building\u2026";
+  logLine("REPORT: building over " + participants.length + " folder(s)\u2026");
+  const r = await api("/api/report/compliance", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ participants }),
+  }).catch(() => ({ error: "request failed" }));
+  btn.disabled = false;
+  btn.textContent = was;
+  if (r.error) { logLine("Error: " + r.error, "error"); return; }
+
+  const v = (r.report && r.report.verdicts) || {};
+  logLine("  " + r.n_rows + " recording(s) \u00b7 " + (v.PASS || 0) + " pass \u00b7 " +
+          (v.REVIEW || 0) + " review \u00b7 " + ((v.FAIL || 0) + (v.ERROR || 0)) + " fail \u00b7 " +
+          ((r.report && r.report.outstanding) || []).length + " outstanding", "ok");
+  logLine("  written to " + r.dir, "ok");
+  const open = '/api/report/' + encodeURIComponent(r.name);
+  const line = el("div", "logline ok");
+  line.innerHTML = '  <a href="' + open + '?kind=html" target="_blank">open the report</a>' +
+    (r.xlsx ? ' \u00b7 <a href="' + open + '?kind=xlsx">download the workbook</a>' : "");
+  $("#log-run").appendChild(line);
+  $("#log-run").scrollTop = $("#log-run").scrollHeight;
+  // Deliberately not opened for you: a report can take a moment to read and
+  // replacing the dashboard with it mid-run is worse than one more click.
+  showToast("report", "Compliance report ready — link in the log", 100);
+  setTimeout(() => hideToast("report"), 3000);
+}
+
 
 /* -- Panel 1 right: one column, four views ----------------------------------
    Stacked boxes meant scrolling past three things to read the fourth. One pane
    shows at a time; each tab carries the count of what it is hiding. */
 let rPaneManual = false;          // did the user pick the pane themselves?
 
+/* The batch list moved out of the left column into Review & act, so it is
+   loaded when its tab is first opened rather than on every grid refresh. */
+let batchesLoaded = false;
+
 function showRPane(which, manual) {
   if (manual) rPaneManual = true;
   $$(".rtab").forEach((t) => t.classList.toggle("active", t.dataset.rtab === which));
   $$(".rpane").forEach((p) => p.classList.toggle("hidden", p.id !== "rpane-" + which));
+  if (which === "batches" && !batchesLoaded) { batchesLoaded = true; loadBatches(); }
 }
 $$(".rtab").forEach((t) =>
   t.addEventListener("click", () => showRPane(t.dataset.rtab, true)));
@@ -494,6 +822,7 @@ const seasonBoard = {
   pids: [], boards: [], missing: [], req: 0,
   picked: new Set(),          // "pid\0season folder name"
   devices: new Set(),         // device names the buttons apply to
+  gapsFirst: false,           // chip in the summary line: holes to the top
   implemented: [], pending: [],
 };
 
@@ -505,6 +834,13 @@ const SB_STATE = {
   none:     { label: "no data",       cls: "none" },
 };
 const sbKey = (pid, season) => pid + SB_SEP + season;
+
+/* Devices that have nothing to process in a season. The state light only ever
+   reported processing, so a season folder holding one device of four looked
+   exactly like a finished one - which is how CD011's autumn folder read as
+   ready with no flag anywhere on the right. */
+const sbGaps = (sn) => (sn.gaps || []);
+const sbHasGap = (sn) => sbGaps(sn).length > 0;
 
 async function loadSeasonBoard(participants) {
   const pids = participants || [];
@@ -536,7 +872,9 @@ function clearSeasonBoard(msg) {
   seasonBoard.picked = new Set();
   $("#sb-summary").textContent = msg;
   $("#sb-head-right").innerHTML = "";
+  $("#sb-legend").innerHTML = "";
   $("#seasonboard").innerHTML = "";
+  $("#sb-foot").innerHTML = "";
   setRBadge("status", "");
 }
 
@@ -591,15 +929,19 @@ function renderSeasonBoard() {
     $("#sb-summary").textContent = seasonBoard.missing.length
       ? "No output folder for " + seasonBoard.missing.join(", ") + " yet."
       : "Nothing to show for this selection.";
+    $("#sb-legend").innerHTML = "";
+    $("#sb-foot").innerHTML = "";
+    $("#sb-head-right").innerHTML = "";
     return;
   }
 
   // --- summary line ---------------------------------------------------------
-  let nSeasons = 0, nTodo = 0, nDone = 0, nMissing = 0;
+  let nSeasons = 0, nTodo = 0, nDone = 0, nMissing = 0, nGap = 0;
   boards.forEach((b) => {
     nSeasons += b.seasons.length;
     nMissing += Math.max(0, (b.expected_seasons || 4) - b.seasons.length);
     b.seasons.forEach((s) => {
+      if (sbHasGap(s)) nGap += 1;
       if (s.state === "complete") nDone += 1;
       else if (s.state === "pending" || s.state === "partial") nTodo += 1;
     });
@@ -609,10 +951,17 @@ function renderSeasonBoard() {
     " \u00b7 " + nSeasons + " season" + (nSeasons === 1 ? "" : "s") +
     ' \u00b7 <span class="sb-ok">' + nDone + " processed</span>" +
     (nTodo ? ' \u00b7 <span class="sb-todo">' + nTodo + " need processing</span>" : "") +
-    (nMissing ? ' \u00b7 <span class="sb-miss">' + nMissing + " not started</span>" : "");
-  setRBadge("status", nTodo ? String(nTodo) : "", nTodo ? "todo" : "");
+    (nMissing ? ' \u00b7 <span class="sb-miss">' + nMissing + " not started</span>" : "") +
+    (nGap ? ' \u00b7 <button class="sb-gapchip' + (seasonBoard.gapsFirst ? " on" : "") +
+            '" id="sb-gapfilter" title="Bring these folders to the top">\u26a0 ' + nGap +
+            " season" + (nGap === 1 ? "" : "s") + " short of a device</button>" : "");
+  // A season with a hole in it is what a "ready" check must not hide, so the
+  // badge counts it even when every season that HAS data has been processed.
+  setRBadge("status", (nTodo + nGap) ? String(nTodo + nGap) : "",
+            nGap ? "warn" : nTodo ? "todo" : "");
 
   $("#sb-head-right").innerHTML =
+    (nGap ? '<button class="btn ghost tiny warnbtn" id="sb-gaps">tick the gaps</button>' : "") +
     '<button class="btn ghost tiny" id="sb-need">tick all outstanding</button>' +
     '<button class="btn ghost tiny" id="sb-clear">clear ticks</button>';
 
@@ -631,7 +980,15 @@ function renderSeasonBoard() {
   }
   grid.appendChild(head);
 
-  boards.forEach((b) => {
+  // With the chip on, folders that have a hole somewhere come first - the same
+  // move as bringing the naming warnings up.
+  const ordered = seasonBoard.gapsFirst
+    ? [...boards].sort((a, b) =>
+        (b.seasons.some(sbHasGap) ? 1 : 0) - (a.seasons.some(sbHasGap) ? 1 : 0)
+        || String(a.participant).localeCompare(String(b.participant)))
+    : boards;
+
+  ordered.forEach((b) => {
     const row = el("div", "sbm-row");
     const rh = el("button", "sbm-pid pick");
     rh.textContent = b.suffix || b.participant;
@@ -654,11 +1011,30 @@ function renderSeasonBoard() {
       const dots = s.devices.filter((d) => d.implemented).map((d) =>
         '<i class="' + (SB_STATE[d.state] || SB_STATE.none).cls + '" title="' +
         esc(d.device + ": " + (SB_STATE[d.state] || SB_STATE.none).label) + '"></i>').join("");
+      const gaps = sbGaps(s);
+      if (gaps.length) c.classList.add("has-gap");
+      // Everything that IS here has been run, and the season is still short of
+      // a device. Without this it reads "processed" and looks finished.
+      const shortDone = gaps.length && s.state === "complete";
+      if (shortDone) { c.classList.remove("ok"); c.classList.add("warn", "short-done"); }
       c.innerHTML =
-        '<span class="sbm-lab">' + esc(s.label) + (s.unplaced ? ' <b class="sbm-q">?</b>' : "") + "</span>" +
-        '<span class="sbm-sub">' + st.label + "</span>" +
+        '<span class="sbm-lab">' + esc(s.label) + (s.unplaced ? ' <b class="sbm-q">?</b>' : "") +
+          (gaps.length ? ' <b class="sbm-flag">\u26a0</b>' : "") + "</span>" +
+        '<span class="sbm-sub">' + (shortDone ? "processed, still short" : st.label) + "</span>" +
+        (gaps.length ? '<span class="sbm-gap">\u26a0 no ' + esc(gaps.join(", ")) + "</span>" : "") +
+        (s.duplicate_key && s.duplicate_key.length
+          ? '<span class="sbm-gap dup">\u26a0 T2 would merge these two</span>' : "") +
+
         '<span class="sbm-dots">' + dots + "</span>";
       c.title = b.participant + " \u00b7 " + s.label + "\nfolder: " + s.season +
+        (s.calendar_label ? "\nrecordings fall in " + s.calendar_label : "") +
+        (s.label_conflict ? " - the folder name says otherwise" : "") +
+        ((s.duplicate_key || []).length
+          ? "\nSAME calendar season as " + s.duplicate_key.join(", ") +
+            " - T2 lines participants up on that, so it cannot align both" : "") +
+        (gaps.length ? "\nNO DATA for: " + gaps.join(", ") +
+          (s.devices.some((d) => d.implemented && d.has_input)
+            ? "" : " - the folder exists but holds nothing") : "") +
         (s.basis ? "\nseason from " + s.basis : "") +
         (s.unplaced ? "\nordinal could not be derived - slot is a guess" : "") + "\n" +
         s.devices.filter((d) => d.implemented).map((d) =>
@@ -687,16 +1063,19 @@ function renderSeasonBoard() {
       "No output folder yet for " + esc(seasonBoard.missing.join(", ")) + "."));
   }
 
-  host.appendChild(el("div", "sb-legend",
+  $("#sb-legend").innerHTML =
     '<span><i class="lg ok"></i>processed</span>' +
     '<span><i class="lg warn"></i>partial</span>' +
     '<span><i class="lg todo"></i>not processed</span>' +
     '<span><i class="lg none"></i>no data</span>' +
-    '<span class="sb-legend-hint">click a cell, a row name, or S1\u2013S4 to tick</span>'));
+    '<span><i class="lg gapmark">\u26a0</i>a device missing in that season</span>' +
+    '<span><i class="lg warn"></i>processed, still short of a device</span>' +
+    '<span class="sb-legend-hint">click a cell, a row name, or S1\u2013S4 to tick</span>';
 
   // --- devices + actions ----------------------------------------------------
   const picked = sbPairs();
-  const foot = el("div", "sb-foot");
+  const foot = $("#sb-foot");
+  foot.innerHTML = "";
 
   const chips = el("div", "sb-chips");
   seasonBoard.implemented.forEach((dev) => {
@@ -744,14 +1123,12 @@ function renderSeasonBoard() {
   }
   foot.appendChild(tbl);
 
+  // No run buttons here. Ticking seasons narrows what the one RUN button in
+  // the top bar will work on, and the bar says so.
   const acts = el("div", "sb-acts");
-  acts.innerHTML =
-    '<span class="sb-plan" id="sb-plan"></span>' +
-    '<span class="sb-spacer"></span>' +
-    '<button class="btn tiny" id="sb-process">Process</button>' +
-    '<button class="btn tiny warn" id="sb-reprocess">Reprocess</button>';
+  acts.innerHTML = '<span class="sb-plan" id="sb-plan"></span>';
   foot.appendChild(acts);
-  host.appendChild(foot);
+
 
   $("#sb-need").addEventListener("click", () => {
     seasonBoard.boards.forEach((b) => b.seasons.forEach((s) => {
@@ -763,8 +1140,22 @@ function renderSeasonBoard() {
     seasonBoard.picked = new Set();
     renderSeasonBoard();
   });
-  $("#sb-process", acts).addEventListener("click", () => startSeasonRun(false));
-  $("#sb-reprocess", acts).addEventListener("click", () => startSeasonRun(true));
+  // Ticking a season with a hole is how you then look at it - Files, or the
+  // naming pane - rather than processing it.
+  const gapBtn = $("#sb-gaps");
+  if (gapBtn) gapBtn.addEventListener("click", () => {
+    let n = 0;
+    seasonBoard.boards.forEach((b) => b.seasons.forEach((s) => {
+      if (sbHasGap(s)) { seasonBoard.picked.add(sbKey(b.participant, s.season)); n += 1; }
+    }));
+    logLine(`Ticked ${n} season(s) missing an expected device.`, "warning");
+    renderSeasonBoard();
+  });
+  const gapChip = $("#sb-gapfilter");
+  if (gapChip) gapChip.addEventListener("click", () => {
+    seasonBoard.gapsFirst = !seasonBoard.gapsFirst;
+    renderSeasonBoard();
+  });
   updateSeasonActions();
 }
 
@@ -789,28 +1180,27 @@ function toggleSlot(i) {
 }
 
 function updateSeasonActions() {
-  const plan = $("#sb-plan"), pb = $("#sb-process"), rb = $("#sb-reprocess");
-  if (!pb) return;
+  const plan = $("#sb-plan");
+  if (!plan) return;
   const picked = sbPairs();
   const devices = [...seasonBoard.devices];
-  if (!picked.length || !devices.length) {
-    plan.textContent = picked.length ? "pick a device" : "tick a season";
-    pb.disabled = true; rb.disabled = true;
-    return;
+  if (!picked.length) {
+    plan.textContent = "Nothing ticked \u2014 RUN will work on every selected folder.";
+  } else if (!devices.length) {
+    plan.textContent = "Pick at least one device.";
+  } else {
+    const folders = new Set(picked.map((x) => x.pid)).size;
+    plan.textContent = "RUN is narrowed to " + picked.length + " ticked season(s) in " +
+      folders + " folder(s).";
   }
-  const todo = sbRollup().reduce((n, r) => n + r.todo, 0);
-  const folders = new Set(picked.map((p) => p.pid)).size;
-  pb.disabled = todo === 0;
-  rb.disabled = false;
-  plan.textContent = picked.length + " season(s) in " + folders + " folder(s) \u00b7 " +
-    (todo ? todo + " outstanding" : "all processed");
+  updateRunPlan();
 }
 
-async function startSeasonRun(force) {
+async function startSeasonRun(force, dryRun) {
   const picked = sbPairs();
   const devices = [...seasonBoard.devices];
   if (!picked.length || !devices.length) return;
-  if (!currentInitials()) {
+  if (!dryRun && !currentInitials()) {
     logLine("Enter your initials (2-4 letters) before a run that writes data.", "warning");
     $("#initials").focus(); $("#initials").classList.add("need");
     return;
@@ -832,7 +1222,7 @@ async function startSeasonRun(force) {
     ? scope[0].participant + " \u00b7 " + picked.map((p) => p.sn.label).join(", ")
     : picked.length + " seasons \u00b7 " + scope.length + " folders";
 
-  if (force) {
+  if (force && !dryRun) {
     const ok = window.confirm(
       "Reprocess " + devices.join(", ") + " for " + label + "?\n\n" +
       "Everything for those devices is redone, including items already complete. " +
@@ -843,10 +1233,10 @@ async function startSeasonRun(force) {
   $("#log-run").innerHTML = "";
   $("#progress-list").innerHTML = "";
   progressCards = {}; currentLabel = null; killTimer();
-  currentRunMode = force ? "force" : "new";
-  setJobStatus((force ? "REPROCESS" : "RUN") + " \u00b7 " + picked.length + " season(s)",
+  currentRunMode = dryRun ? "preview" : force ? "force" : "new";
+  setJobStatus(currentRunMode.toUpperCase() + " \u00b7 " + picked.length + " season(s)",
                "running mode-" + currentRunMode);
-  logLine((force ? "FORCE REPROCESS" : "RUN") + ": " + label + " \u00b7 " + devices.join(", "),
+  logLine(currentRunMode.toUpperCase() + ": " + label + " \u00b7 " + devices.join(", "),
           force ? "warning" : "ok");
   if (!rPaneManual) showRPane("progress");
 
@@ -857,14 +1247,14 @@ async function startSeasonRun(force) {
       participants: scope.map((s) => s.participant),
       scope,
       devices,
-      force, dry_run: false,
+      force, dry_run: !!dryRun,
       initials: currentInitials(),
     }),
   }).catch(() => ({ error: "request failed" }));
   if (resp.error) { logLine("Error: " + resp.error, "error"); return; }
-  realJobActive = true;
+  realJobActive = !dryRun;
   currentJobId = resp.job_id;
-  openJobSocket(resp.job_id, false);
+  openJobSocket(resp.job_id, !!dryRun);
 }
 
 
@@ -902,9 +1292,9 @@ const runBtn = $("#run-btn");
 // preview -> dry run: plan + naming check, nothing downloaded or written
 // force   -> redo everything selected, including complete items
 const RUN_MODES = {
-  new:     { label: "RUN<br>CHECKS",  tag: "RUN · new & unfinished", cls: "" },
-  preview: { label: "PREVIEW<br>(dry run)", tag: "PREVIEW · dry run", cls: "preview" },
-  force:   { label: "FORCE<br>REPROCESS", tag: "FORCE REPROCESS", cls: "force" },
+  new:     { label: "RUN CHECKS", tag: "RUN · new & unfinished", cls: "" },
+  preview: { label: "PREVIEW (dry run)", tag: "PREVIEW · dry run", cls: "preview" },
+  force:   { label: "FORCE REPROCESS", tag: "FORCE REPROCESS", cls: "force" },
 };
 function runMode() { return ($("input[name=runmode]:checked") || {}).value || "new"; }
 
@@ -918,6 +1308,25 @@ function updateRunPlan() {
   const cells = runGrid.cells.filter((c) => sel.has(c.participant));
   const plan = $("#run-plan");
   if (!cells.length) { plan.textContent = "Select folders to see what RUN will do."; return; }
+
+  // Ticked seasons take precedence, and the bar has to say so: otherwise the
+  // same button would quietly mean two different scopes.
+  const ticked = sbPairs();
+  if (ticked.length) {
+    const folders = new Set(ticked.map((x) => x.pid)).size;
+    const devs = [...seasonBoard.devices];
+    const short = ticked.filter((x) => sbHasGap(x.sn));
+    const shortDevs = [...new Set(short.flatMap((x) => sbGaps(x.sn)))];
+    plan.innerHTML =
+      `<b class="plan-scope">Narrowed to ${ticked.length} ticked season(s) in ` +
+      `${folders} folder(s)</b> \u00b7 ${esc(devs.join(", ") || "no device picked")}` +
+      (short.length
+        ? ` <span class="plan-warn">\u26a0 ${short.length} will still be short of ` +
+          `${esc(shortDevs.join(", "))} afterwards.</span>`
+        : "") +
+      ' <span class="muted">Clear the ticks on the right to run the whole selection.</span>';
+    return;
+  }
   const total = cells.reduce((a, c) => a + (c.total || 0), 0);
   const done = cells.reduce((a, c) => a + (c.done || 0), 0);
   const todo = total - done;
@@ -929,7 +1338,18 @@ function updateRunPlan() {
   else if (mode === "preview") txt =
     `Lists <b>${todo}</b> item(s) to process and <b>${done}</b> to skip. Nothing is downloaded or written.`;
   else txt = `Redoes all <b>${total}</b> item(s), including <b>${done}</b> already complete (~1 GB download per Actigraph recording).`;
-  if (skipped) txt += ` <span class="plan-warn">${skipped} input file(s) can't be processed — see Naming check.</span>`;
+  if (skipped) txt += ` <span class="plan-warn">${skipped} input file(s) can't be processed — see Naming.</span>`;
+  // Running an incomplete participant is allowed and does the right thing: the
+  // devices that are there get processed and the missing ones are a no-op. It
+  // is worth saying out loud, because the output then looks "done" while the
+  // participant is still short of devices.
+  const short = cells.filter((c) => (c.devices_missing || []).length);
+  if (short.length) {
+    const devs = [...new Set(short.flatMap((c) => c.devices_missing))].sort();
+    txt += ` <span class="plan-warn">${short.length} folder(s) are missing ` +
+           `${devs.join(", ")} — those devices are simply skipped, and the folder ` +
+           `will read as processed while still incomplete.</span>`;
+  }
   plan.innerHTML = txt;
 }
 document.querySelectorAll("input[name=runmode]").forEach((r) => r.addEventListener("change", updateRunPlan));
@@ -945,6 +1365,12 @@ runBtn.addEventListener("click", () => {
     logLine("Enter your initials (2-4 letters) before a run that writes data — it's recorded on the batch.", "warning");
     $("#initials").focus();
     $("#initials").classList.add("need");
+    return;
+  }
+  // Ticked seasons narrow the run; nothing ticked means the whole selection.
+  // One button either way - the plan line above says which it will be.
+  if (sbPairs().length) {
+    startSeasonRun(mode === "force", mode === "preview");
     return;
   }
   if (mode === "force") {
@@ -1290,7 +1716,54 @@ function renderAggregate(a) {
    These were one flat row of buttons labelled "CD011 . Autumn 2025" - every
    participant, season and device in the selection mixed into a single strip.
    The study is organised participant -> season -> device, so this is too. */
-const recTree = { participants: [], open: new Set(), picked: null, req: 0 };
+const recTree = { participants: [], open: new Set(), picked: null, req: 0,
+                  season: null };   // null = every season
+
+/* The items of one participant that the season chips let through. */
+function recItems(row) {
+  if (recTree.season == null) return row.items;
+  return row.items.filter((it) => (it.season_n || 0) === recTree.season);
+}
+
+/* One chip per season ordinal, with how many recordings sit behind it. */
+function renderSeasonChips() {
+  const host = $("#rec-seasons");
+  if (!host) return;
+  const rows = recTree.participants;
+  const total = rows.reduce((n, r) => n + r.items.length, 0);
+  if (!total) { host.innerHTML = ""; return; }
+
+  const counts = {};
+  const folders = {};
+  rows.forEach((r) => r.items.forEach((it) => {
+    const n = it.season_n || 0;
+    counts[n] = (counts[n] || 0) + 1;
+    (folders[n] = folders[n] || new Set()).add(r.participant);
+  }));
+  const slots = Object.keys(counts).map(Number).sort((a, b) => a - b);
+
+  host.innerHTML = "";
+  const all = el("button", "rchip" + (recTree.season == null ? " on" : ""),
+                 "All seasons <i>" + total + "</i>");
+  all.title = "Every season of every selected folder";
+  all.addEventListener("click", () => { recTree.season = null; renderRecordings(); });
+  host.appendChild(all);
+
+  slots.forEach((n) => {
+    const label = n ? "S" + n : "unplaced";
+    const b = el("button", "rchip" + (recTree.season === n ? " on" : ""),
+                 esc(label) + " <i>" + counts[n] + "</i>");
+    b.title = n
+      ? counts[n] + " recording(s) in the " + ordinal(n) + " season of " +
+        folders[n].size + " folder(s)"
+      : "Recordings whose season ordinal could not be worked out";
+    b.addEventListener("click", () => {
+      recTree.season = recTree.season === n ? null : n;
+      renderRecordings();
+    });
+    host.appendChild(b);
+  });
+}
 
 async function loadRecordings(participants) {
   const host = $("#rectree");
@@ -1310,6 +1783,11 @@ async function loadRecordings(participants) {
       .catch(() => ({ participant: pid, items: [] }))));
   if (mine !== recTree.req) return;
   recTree.participants = rows;
+  // A season that no longer exists in this selection would hide everything.
+  if (recTree.season != null &&
+      !rows.some((r) => r.items.some((it) => (it.season_n || 0) === recTree.season))) {
+    recTree.season = null;
+  }
   // open a single participant by default; keep many collapsed so the list
   // stays scannable
   recTree.open = new Set(rows.length === 1 ? [rows[0].participant] : []);
@@ -1329,20 +1807,31 @@ function renderRecordings() {
   const host = $("#rectree");
   host.innerHTML = "";
   const rows = recTree.participants;
-  const total = rows.reduce((n, r) => n + r.items.length, 0);
-  $("#mv-title").textContent = "\u00b7 " + total + " recording(s) in " + rows.length + " folder(s)";
-  if (!total) {
+  const all = rows.reduce((n, r) => n + r.items.length, 0);
+  renderSeasonChips();
+  const shown = rows.reduce((n, r) => n + recItems(r).length, 0);
+  $("#mv-title").textContent = "\u00b7 " + shown + " recording(s) in " +
+    rows.filter((r) => recItems(r).length).length + " folder(s)" +
+    (recTree.season != null ? " \u00b7 S" + recTree.season + " only" : "");
+  if (!all) {
     host.innerHTML = '<div class="muted">Nothing processed in this selection yet.</div>';
     return;
   }
+  if (!shown) {
+    host.innerHTML = '<div class="muted">No recordings in that season for this selection.</div>';
+    return;
+  }
+  // With one season chosen, every folder opens: there is little to scroll past
+  // and the point is to see them side by side.
   rows.forEach((row) => {
-    const open = recTree.open.has(row.participant);
+    if (!recItems(row).length) return;
+    const open = recTree.season != null || recTree.open.has(row.participant);
     const block = el("div", "rec-p" + (open ? " open" : ""));
     const head = el("button", "rec-phead");
     head.innerHTML = '<span class="rec-caret">' + (open ? "\u25be" : "\u25b8") + "</span>" +
       "<b>" + esc(row.participant) + "</b>" +
-      '<span class="rec-meta">' + row.items.length + " recording(s) \u00b7 " +
-      groupBySeason(row.items).length + " season(s)</span>";
+      '<span class="rec-meta">' + recItems(row).length + " recording(s) \u00b7 " +
+      groupBySeason(recItems(row)).length + " season(s)</span>";
     head.addEventListener("click", () => {
       if (open) recTree.open.delete(row.participant);
       else recTree.open.add(row.participant);
@@ -1350,16 +1839,25 @@ function renderRecordings() {
     });
     block.appendChild(head);
     if (open) {
-      groupBySeason(row.items).forEach((grp) => {
+      groupBySeason(recItems(row)).forEach((grp) => {
         const sb = el("div", "rec-s");
-        sb.appendChild(el("div", "rec-shead", esc(grp.season)));
+        const n = (grp.items[0] || {}).season_n;
+        sb.appendChild(el("div", "rec-shead",
+          (n ? '<span class="rec-sn">S' + n + "</span>" : "") + esc(grp.season)));
         const devs = el("div", "rec-devs");
+        // A season can hold several items of one device - Qualtrics has one
+        // per survey - so the device name alone is ambiguous. Qualify it with
+        // the item's own name only when it has to be.
+        const perDevice = {};
+        grp.items.forEach((it) => { perDevice[it.device] = (perDevice[it.device] || 0) + 1; });
         grp.items.forEach((it) => {
           const v = it.verdict || "";
+          const qualifier = perDevice[it.device] > 1 ? it.stem : "";
           const on = recTree.picked && recTree.picked.stem === it.stem &&
                      recTree.picked.season === it.season && recTree.picked.device === it.device;
           const b = el("button", "rec-dev" + (on ? " picked" : ""));
           b.innerHTML = "<b>" + esc(it.device) + "</b>" +
+            (qualifier ? '<span class="rec-sub">' + esc(qualifier) + "</span>" : "") +
             (v ? '<span class="verdict ' + esc(v) + '">' + esc(v) + "</span>" : "") +
             '<span class="rec-days">' +
               (it.valid_days != null ? it.valid_days + "/" + it.total_days + " valid days" : "") +
@@ -1858,30 +2356,66 @@ $("#show-archived").addEventListener("change", loadBatches);
 
 async function loadBatches() {
   const box = $("#batchlist");
-  const data = await api(`/api/batches?stage=PRE&archived=${$("#show-archived").checked ? 1 : 0}`).catch(() => null);
-  const list = (data && data.batches) || [];
+  const archived = $("#show-archived").checked ? 1 : 0;
+  // Both stages: a T2 export is a run of the pipeline too, and leaving it out
+  // meant the only record of an export was a JSON file nobody opens.
+  const [pre, t2] = await Promise.all([
+    api(`/api/batches?stage=PRE&archived=${archived}`).catch(() => null),
+    api(`/api/batches?stage=T2&archived=${archived}`).catch(() => null),
+  ]);
+  const list = [...((pre && pre.batches) || []), ...((t2 && t2.batches) || [])]
+    .sort((a, b) => String(b.started_at || "").localeCompare(String(a.started_at || "")));
   box.innerHTML = "";
+  const bad = list.filter((b) => b.status === "error" || b.status === "failed").length;
+  setRBadge("batches", list.length ? String(list.length) : "", bad ? "warn" : "");
+
   if (!list.length) { box.appendChild(el("div", "muted", "No batches yet.")); return; }
+
   list.forEach((b) => {
     const it = b.items || {};
+    const stage = (b.stage || "PRE").toUpperCase();
     const row = el("div", `batch ${b.status} ${b.archived_flag ? "archived" : ""}`);
     const when = (b.started_at || "").replace("T", " ").slice(0, 16);
-    row.appendChild(el("div", "b-main",
-      `<span class="b-id">${esc(b.batch_id)}</span>` +
-      `<span class="pill b-status ${b.status === "done" ? "done" : b.status === "cancelled" ? "" : "error"}">${esc(b.status)}</span>`));
-    row.appendChild(el("div", "b-meta",
-      `${esc(b.mode_label || b.mode)} · ${esc(b.initials)} · ${when} · ${b.n_participants} participant(s) · ` +
-      `processed ${it.done || 0} · skipped ${it.skipped || 0}` +
-      (it.failed ? ` · <span class="b-fail">failed ${it.failed}</span>` : "") +
-      (b.archived ? ` · archived by ${esc(b.archived.by)}` : "")));
+
+    // What this run actually did, in as few words as it takes.
+    let what;
+    if (stage === "T2") {
+      what = b.mode === "export"
+        ? `exported ${b.n_measures || "?"} measure(s) · ${b.n_days || "?"} day(s)` +
+          (b.n_files ? ` · ${b.n_files} file(s)` : "")
+        : `selection · ${(b.devices || []).length} device(s)` +
+          (b.paired_days ? ` · ${b.paired_days} paired day(s)` : "");
+    } else {
+      const bits = [];
+      if (it.done) bits.push(`${it.done} processed`);
+      if (it.skipped) bits.push(`${it.skipped} skipped`);
+      if (it.failed) bits.push(`<span class="b-fail">${it.failed} failed</span>`);
+      if (it.cancelled) bits.push(`${it.cancelled} cancelled`);
+      what = bits.join(" · ") || "nothing to do";
+    }
+
+    row.appendChild(el("div", "b-line",
+      `<span class="b-stage ${stage.toLowerCase()}">${esc(stage)}</span>` +
+      `<span class="b-when">${esc(when)}</span>` +
+      `<span class="b-who">${esc(b.initials || "—")}</span>` +
+      `<span class="b-n">${b.n_participants || 0} folder(s)</span>` +
+      `<span class="b-what">${what}</span>` +
+      `<span class="pill b-status ${b.status === "done" || b.status === "exported" || b.status === "sent"
+        ? "done" : b.status === "cancelled" ? "" : "error"}">${esc(b.status)}</span>`));
+
+    row.title = [b.batch_id,
+                 b.mode_label || b.mode,
+                 b.export_of ? "export of " + b.export_of : "",
+                 b.archived ? "archived by " + b.archived.by : ""]
+      .filter(Boolean).join("\n");
+
     if (!b.archived_flag) {
-      const x = el("button", "b-x", "✕");
+      const x = el("button", "b-x", "\u2715");
       x.title = "Archive: hide from the list (the record is kept)";
       x.addEventListener("click", async () => {
         const ini = currentInitials();
         if (!ini) { logLine("Enter your initials to archive a batch.", "warning"); $("#initials").focus(); return; }
-        if (!window.confirm(`Archive batch ${b.batch_id}?
-It will be hidden from this list; the record is kept.`)) return;
+        if (!window.confirm(`Archive batch ${b.batch_id}?\nIt will be hidden from this list; the record is kept.`)) return;
         const r = await api(`/api/batches/${encodeURIComponent(b.batch_id)}/archive`, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ initials: ini }),
@@ -1894,7 +2428,8 @@ It will be hidden from this list; the record is kept.`)) return;
     box.appendChild(row);
   });
 }
-loadBatches();
+
+// The batch list lives in Review & act now; showRPane loads it on first open.
 
 
 // ================================================================== T2
@@ -1986,9 +2521,67 @@ async function openT2Modal() {
         ` Folders: ${s.folders.join(", ")}`)).join("")
     : `<span class="muted">No seasons found for these participants.</span>`;
   renderT2VarList(dict);
+  loadT2Presets();
   $$("input[name=t2dev]").forEach((i) => i.addEventListener("change", () => { renderT2VarList(dict); invalidateT2Check(); }));
   $$("input[name=t2season]").forEach((i) => i.addEventListener("change", invalidateT2Check));
   updateT2SendState();
+}
+
+/* -- Topic presets ------------------------------------------------------------
+   A standing-dataset topic is a thirty-variable selection across four devices.
+   Rebuilding it by hand each time is where repeatability goes: two exports of
+   "the same" topic end up different and nothing records which one a result came
+   from. A preset holds devices + variables and a name - never participants,
+   who are chosen fresh every time and recorded on the export. */
+let T2_PRESETS = null;
+
+async function loadT2Presets() {
+  const sel = $("#t2m-preset");
+  if (!sel) return;
+  if (T2_PRESETS === null) {
+    const r = await api("/api/t2/presets").catch(() => ({ presets: [] }));
+    T2_PRESETS = r.presets || [];
+  }
+  sel.innerHTML = '<option value="">\u2014 start from scratch \u2014</option>' +
+    T2_PRESETS.map((p) =>
+      '<option value="' + esc(p.id) + '">' + esc(p.name) +
+      "  \u00b7  " + p.n_available + " variable(s)</option>").join("");
+  sel.value = "";
+  $("#t2m-presetnote").innerHTML = "";
+  sel.onchange = () => applyT2Preset(sel.value);
+}
+
+function applyT2Preset(id) {
+  const note = $("#t2m-presetnote");
+  const preset = (T2_PRESETS || []).find((p) => p.id === id);
+  if (!preset) { note.innerHTML = ""; return; }
+
+  // devices first - the variable list is rebuilt from whatever is ticked
+  const want = new Set(preset.devices);
+  $$("input[name=t2dev]").forEach((i) => { i.checked = want.has(i.value); });
+  t2Dictionary().then((dict) => {
+    renderT2VarList(dict);
+    const wanted = new Set(preset.variables);
+    $$("input[name=t2var]").forEach((i) => { i.checked = wanted.has(i.value); });
+    varsChanged();
+    if (!$("#t2m-name").value.trim()) $("#t2m-name").value = preset.name;
+
+    const offered = $$("input[name=t2var]").length;
+    const got = $$("input[name=t2var]").filter((i) => i.checked).length;
+    note.innerHTML =
+      (preset.question ? '<div class="t2m-q">' + esc(preset.question) + "</div>" : "") +
+      '<div><b>' + got + "</b> of " + offered + " variable(s) ticked" +
+      (preset.unknown.length
+        ? ' \u00b7 <span class="bad">' + preset.unknown.length +
+          " no longer in the dictionary</span>" : "") +
+      "</div>" +
+      (preset.missing.length
+        ? '<details class="t2m-missing"><summary>' + preset.missing.length +
+          " thing(s) this topic asks for that the pipeline cannot supply yet</summary><ul>" +
+          preset.missing.map((m) => "<li>" + esc(m) + "</li>").join("") +
+          "</ul></details>"
+        : "");
+  });
 }
 
 function renderT2VarList(dict) {

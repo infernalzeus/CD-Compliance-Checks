@@ -57,19 +57,20 @@ LONG_COLUMNS = [
 ]
 
 #: Meteorological seasons. Winter spans a year end, so it is named for the year
-#: it starts in: January 2026 belongs to "Winter 2025/26".
-_SEASON_OF_MONTH = {12: "Winter", 1: "Winter", 2: "Winter",
-                    3: "Spring", 4: "Spring", 5: "Spring",
-                    6: "Summer", 7: "Summer", 8: "Summer",
-                    9: "Autumn", 10: "Autumn", 11: "Autumn"}
+#: The study's seasons are calendar quarters beginning on 1 January: winter is
+#: January to March of the year the folder names, and so on round the year. This
+#: is not the astronomical convention - there is deliberately no season spanning
+#: a year boundary, because a folder cannot be named "Winter 2025/26".
+_SEASON_OF_MONTH = {1: "Winter", 2: "Winter", 3: "Winter",
+                    4: "Spring", 5: "Spring", 6: "Spring",
+                    7: "Summer", 8: "Summer", 9: "Summer",
+                    10: "Autumn", 11: "Autumn", 12: "Autumn"}
 SEASON_ORDER = {"Winter": 0, "Spring": 1, "Summer": 2, "Autumn": 3}
 
 
 def calendar_season(d: date) -> tuple[str, int]:
-    """The season of the year a date falls in, and the year that season began."""
-    kind = _SEASON_OF_MONTH[d.month]
-    year = d.year - 1 if (kind == "Winter" and d.month != 12) else d.year
-    return kind, year
+    """The season a date falls in, and its year. No season crosses a new year."""
+    return _SEASON_OF_MONTH[d.month], d.year
 
 
 def season_key(kind: str, year: int) -> str:
@@ -78,7 +79,8 @@ def season_key(kind: str, year: int) -> str:
 
 
 def season_label(kind: str, year: int) -> str:
-    return f"{kind} {year}/{str(year + 1)[2:]}" if kind == "Winter" else f"{kind} {year}"
+    """'Winter 2026' - the same shape the study names its folders."""
+    return f"{kind} {year}"
 
 
 def parse_season_key(key: str) -> tuple[str, int]:
@@ -91,10 +93,25 @@ def season_code(kind: str, year: int) -> str:
     """Short form for batch ids: 'win25', 'aut25'."""
     return f"{kind[:3].lower()}{year % 100:02d}"
 
+def folder_season_rank(name: str) -> tuple[int, int] | None:
+    """(year, quarter) from a folder called '<Season> <Year>', else None.
+
+    A fallback for folders with no dated file in them. The dates come first
+    where there are any, because a folder's name can be wrong - CD008's "Winter
+    2025" holds February 2026 - and the recordings cannot be.
+    """
+    m = _SEASON_NAME.match(_norm_season(name))
+    if not m:
+        return None
+    return (int(m.group(2)), SEASON_ORDER[m.group(1).capitalize()])
+
+
 _DATE_IN_NAME = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
 _SEASON_NAME = re.compile(r"^\s*(Winter|Spring|Summer|Autumn)\s+(\d{4})\s*$", re.I)
-# Name-only fallback when a season folder has no dated file at all.
-_SEASON_MONTH = {"spring": 4, "summer": 7, "autumn": 10, "winter": 12}
+# Name-only fallback when a season folder has no dated file at all: the first
+# month of that quarter. Winter is January, not December - the study's seasons
+# do not cross a new year.
+_SEASON_MONTH = {"winter": 1, "spring": 4, "summer": 7, "autumn": 10}
 
 
 # ---------------------------------------------------------------------------
@@ -225,7 +242,12 @@ def season_numbers(config: Config, participant: str) -> dict[str, dict[str, Any]
                 start, basis = date(int(m.group(2)), _SEASON_MONTH[m.group(1).lower()], 1), "folder name"
         info["start"], info["basis"] = start, basis
 
-    ordered = sorted(seasons.items(), key=lambda kv: (kv[1]["start"] is None, kv[1]["start"] or date.max, kv[0]))
+    # Ordered by the data's own dates. The folder names cannot do it: CD008's
+    # "Winter 2025" holds February 2026 and CD011's "Winter 2026" holds February
+    # 2026 too - the two participants name a winter folder after opposite ends
+    # of it, so only the recordings say which season came first.
+    ordered = sorted(seasons.items(),
+                     key=lambda kv: (kv[1]["start"] is None, kv[1]["start"] or date.max, kv[0]))
     out: dict[str, dict[str, Any]] = {}
     for i, (name, info) in enumerate(ordered):
         anchor = info["start"]
@@ -234,16 +256,38 @@ def season_numbers(config: Config, participant: str) -> dict[str, dict[str, Any]
             "anchor": anchor.isoformat() if anchor else None,
             "basis": info["basis"],
             "folders": [f.name for f in info["folders"]],
+            # What the study calls it. This is the name people read; the derived
+            # season below is a separate fact about when the data was recorded.
+            "folder_label": _norm_season(name),
         }
         if anchor:
             kind, year = calendar_season(anchor)
             entry.update({"season_key": season_key(kind, year), "season_label": season_label(kind, year),
                           "season_type": kind, "season_year": year,
                           "season_code": season_code(kind, year)})
+            # The folder says one season and the recording dates say another:
+            # a visit that slipped. Real information, so it is reported, not
+            # quietly overwritten.
+            # Both halves of the name have to agree with the dates: CD008's
+            # "Winter 2025" holds February 2026, which the season alone misses.
+            named = _SEASON_NAME.match(_norm_season(name))
+            entry["label_conflict"] = bool(named) and (
+                named.group(1).lower() != kind.lower() or int(named.group(2)) != year)
         else:
             entry.update({"season_key": None, "season_label": None, "season_type": None,
-                          "season_year": None, "season_code": None})
+                          "season_year": None, "season_code": None, "label_conflict": False})
         out[name] = entry
+
+    # Two of one participant's seasons resolving to the same calendar season
+    # cannot both be right for T2, which lines participants up on season_key.
+    seen: dict[str, list[str]] = {}
+    for name, entry in out.items():
+        if entry.get("season_key"):
+            seen.setdefault(entry["season_key"], []).append(name)
+    for key, names in seen.items():
+        if len(names) > 1:
+            for name in names:
+                out[name]["duplicate_key"] = sorted(n for n in names if n != name)
     return out
 
 

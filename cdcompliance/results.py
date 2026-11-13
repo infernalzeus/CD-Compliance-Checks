@@ -94,6 +94,14 @@ def output_items(config: Config, participant: str) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     if not root.exists():
         return items
+    # The participant's own 1st..4th season, worked out the same way the
+    # right-hand board does it, so "S2" means one thing across the app.
+    from . import t2_data                      # local: t2_data -> results
+    try:
+        numbers = {t2_data._norm_season(k): v.get("n")
+                   for k, v in t2_data.season_numbers(config, participant).items()}
+    except Exception:                          # never let a label stop a listing
+        numbers = {}
 
     for season_dir in sorted(p for p in root.iterdir() if p.is_dir()):
         for dev_dir in sorted(p for p in season_dir.iterdir() if p.is_dir()):
@@ -109,6 +117,7 @@ def output_items(config: Config, participant: str) -> list[dict[str, Any]]:
                         "participant": participant,
                         "season": season_dir.name,
                         "season_type": season_type(season_dir.name),
+                        "season_n": numbers.get(t2_data._norm_season(season_dir.name)),
                         "device": dev_dir.name.lower(),
                         "stem": stem,
                         "verdict": comp.get("verdict"),

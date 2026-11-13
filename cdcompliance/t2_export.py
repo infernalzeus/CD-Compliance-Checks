@@ -4,7 +4,7 @@ Everything else in T2 reads. Export takes the preview exactly as it stands -
 the same day range, cut-offs and measures - and writes it to the per-user
 ``t2_root`` with enough provenance to reproduce it:
 
-    <t2_root>/<selection-id>_<when>/
+    <t2_root>/exports/<YYYY-MM>/T2-<when>-<selection tail>/
         data_long.csv        one row per participant / date / measure
         data_wide_day.csv    one row per participant-day, one column per measure
         season_summary.csv   one row per participant-season / measure
@@ -263,7 +263,7 @@ def preview(config: Config, batch_id: str, sel: t2_data.T2Selection, frame,
         elif name == "report.pdf" and not t2_report.available():
             entry["what"] = "skipped: matplotlib is not installed in this environment"
         files.append(entry)
-    destination = Path(config.paths.t2_root) / f"{batch_id}_<time>"
+    destination = Path(config.paths.t2_root) / "exports" / "<YYYY-MM>" / f"T2-<time>-{batch_id}"
     return {
         "files": files,
         "inclusion": built["inclusion"],
@@ -290,7 +290,11 @@ def write(config: Config, batch_id: str, sel: t2_data.T2Selection, frame,
     # in the same shape as a batch id, and the manifest links back.
     tail = batch_id.split("-", 3)[-1] if batch_id.count("-") >= 3 else batch_id
     folder_name = f"T2-{when:%Y%m%d-%H%M%S}-{tail}"
-    root = Path(config.paths.t2_root)
+    # Exports used to pile up loose in t2_root, so a year of them was one flat
+    # list of machine ids. They now sit under the year-month they were made in,
+    # which is the only grouping that is always true of an export and never
+    # changes after the fact.
+    root = Path(config.paths.t2_root) / "exports" / f"{when:%Y-%m}"
     # Two exports can land in the same second (a re-export, a double-click), so
     # give the second one its own folder rather than refusing it.
     base, suffix = folder_name, 2
