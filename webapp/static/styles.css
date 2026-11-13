@@ -1295,3 +1295,67 @@ main.panel { flex: 1 1 auto; }
 #panel-run .rstack { flex: 1 1 58%; }
 #panel-run .qbox { flex: 1 1 42%; }
 .keybox > summary::before { margin-right: 4px; }
+
+/* --- the panes are sizeable, and the matrix holds still ------------------ */
+.rowsplit { flex: 0 0 9px; margin: 1px 0 -1px; cursor: row-resize; position: relative; }
+.rowsplit::before { content: ""; position: absolute; left: 10%; right: 10%; top: 4px;
+  height: 1px; background: var(--line); }
+.rowsplit:hover::before { background: var(--accent); box-shadow: 0 0 6px rgba(79,140,255,.5); }
+/* The grid takes what its folders need, capped by the handle, so a short
+   selection gives the room back to the log instead of leaving a tall gap. */
+#panel-run .grid { flex: 0 1 auto; max-height: var(--grid-h, 46%); }
+#panel-run .rstack { flex: 0 1 var(--rstack-h, 58%); }
+/* Fetching a new matrix no longer blanks the pane; the old one dims in place
+   so nothing moves and the scroll survives. */
+.seasonboard.sb-loading { opacity: .45; transition: opacity .12s ease; }
+.sbm-row.just-added .sbm-pid { box-shadow: inset 0 0 0 1px var(--accent); }
+/* An action bar row that has nothing to say does not exist. */
+#run-plan:empty { display: none; }
+.ab-plan { padding: 2px 0 0; }
+
+/* --- Visualise: chips are seasons of the year --------------------------- */
+.rchip.s-winter.on { background: #4f8cff; border-color: #4f8cff; }
+.rchip.s-spring.on { background: #22c55e; border-color: #22c55e; color: #06210f; }
+.rchip.s-summer.on { background: #f59e0b; border-color: #f59e0b; color: #241400; }
+.rchip.s-autumn.on { background: #b58cff; border-color: #b58cff; color: #1a0f2b; }
+.rec-sdot { display: inline-block; width: 7px; height: 7px; border-radius: 2px;
+  margin-right: 8px; vertical-align: 1px; background: var(--muted); }
+.rec-sdot.s-winter { background: #4f8cff; } .rec-sdot.s-spring { background: #22c55e; }
+.rec-sdot.s-summer { background: #f59e0b; } .rec-sdot.s-autumn { background: #b58cff; }
+
+/* One scroller, not two. `.sbm` had its own max-height and overflow, so the
+   matrix scrolled INSIDE a pane that also scrolled - rows reachable only by
+   finding the inner box first, and a scroll position that could not be kept
+   because there were two of them. The pane is the scroller; the matrix is as
+   tall as its rows. */
+#panel-run .sbm { max-height: none; overflow: visible; }
+#panel-run .sbm-row.head { position: sticky; top: 0; z-index: 2;
+  background: var(--panel); padding-bottom: 2px; }
+/* A dragged height is a decision, not a suggestion: the review pane keeps what
+   it was given and progress takes the remainder. */
+#panel-run .rstack { flex: 0 0 var(--rstack-h, 58%); }
+#panel-run .qbox { flex: 1 1 auto; }
+
+/* The filters add up now, so a lit one means "its folders are in the
+   selection", not "this is the one filter in force". */
+#all-filter.active { background: #232834; color: var(--text); border-color: var(--accent); }
+
+/* Green belongs to the finished folders, which is what the grid says too.
+   "Ready" is the opposite state - complete, untouched - so it stops wearing it. */
+.grid.done-filter .cell:not(.tone-done) { opacity: .18; }
+#done-filter.has { color: #7ee2a0; border-color: #1f5133; }
+#done-filter.active { background: #232834; color: var(--text); }
+#ready-filter.has { color: #9dc0ff; border-color: #3b5a99; }
+
+/* The footer under the matrix (device chips, run plan) is reference, not the
+   point of the pane: it keeps to a third of the height and scrolls inside
+   itself, so giving the matrix more room cannot push it off the bottom. */
+#panel-run #rpane-status > .sb-foot {
+  max-height: 34%; overflow: auto; font-size: 11.5px;
+  border-top: 1px solid var(--line); padding-top: 6px; margin-top: 6px;
+  scrollbar-width: thin; scrollbar-color: #39404e transparent;
+}
+#panel-run #rpane-status > .sb-foot .btn { padding: 4px 9px; font-size: 11px; }
+#panel-run #rpane-status > .sb-foot .sb-chip { padding: 3px 9px; font-size: 11px; }
+#panel-run #rpane-status > .sb-foot .sb-rollrow { padding: 4px 7px; }
+#panel-run #rpane-status > .sb-foot > *:first-child { margin-top: 0; }

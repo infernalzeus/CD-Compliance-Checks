@@ -66,9 +66,11 @@
     <header class="actionbar">
       <div class="ab-g">
         <span class="ab-lbl">Select</span>
+        <button class="btn ghost" id="all-filter" title="Select every folder">■ All <span class="flagcount" id="all-count"></span></button>
         <button class="btn ghost flagbtn" id="flag-filter" title="Select only the folders holding files the pipeline cannot process">⛔ Blocked <span class="flagcount" id="flag-count"></span></button>
         <button class="btn ghost" id="incomplete-filter" title="Select only the folders missing one or more expected devices">◌ Incomplete <span class="flagcount" id="incomplete-count"></span></button>
         <button class="btn ghost" id="ready-filter" title="Select only the folders that have every expected device and still have something to process">● Ready <span class="flagcount" id="ready-count"></span></button>
+        <button class="btn ghost" id="done-filter" title="Select the folders that have every expected device AND are fully processed — the validated, complete sets">✓ Processed <span class="flagcount" id="done-count"></span></button>
         <button class="btn ghost" id="clear-run">Clear</button>
         <span class="sel-count" id="sel-count-run">0 selected</span>
       </div>
@@ -86,7 +88,9 @@
         <button class="btn run" id="run-btn">RUN CHECKS</button>
         <button class="btn ghost" id="report-btn" title="Build a compliance report over the selected folders. Reads only — nothing is processed.">☰ Report</button>
       </div>
-      <div class="ab-plan run-plan" id="run-plan">Select folders to see what RUN will do.</div>
+      <!-- Empty until it has something to report; an action bar should not
+           spend a row telling you that you have selected nothing. -->
+      <div class="ab-plan run-plan" id="run-plan"></div>
     </header>
 
     <section class="left">
@@ -94,6 +98,7 @@
         <h2>Source · WT OneDrive staging</h2>
       </div>
       <div class="grid" id="grid-run"></div>
+      <div class="rowsplit" id="split-left-rows" title="Drag to give the grid or the log more room · double-click to reset"></div>
       <!-- Two different questions, deliberately shown two different ways.
            Colour = can this folder be run, and has it been. Marks = which of
            the four seasons have data, one mark per season so that adding a
@@ -188,6 +193,7 @@
         <div class="filetree" id="filetree"><div class="muted">Select a single cell to view its staging files.</div></div>
       </div>
       </div><!-- /.rstack -->
+      <div class="rowsplit" id="split-right-rows" title="Drag to give review or progress more room · double-click to reset"></div>
 
       <!-- The fourth pane. What a run is doing is not something to go and find
            under a tab: it is the thing you watch while reading the rest. -->

@@ -79,6 +79,8 @@ function applyLayout(saved) {
   else root.removeProperty("--left-w");
   if (saved.gridH) root.setProperty("--grid-h", saved.gridH);
   else root.removeProperty("--grid-h");
+  if (saved.rstackH) root.setProperty("--rstack-h", saved.rstackH);
+  else root.removeProperty("--rstack-h");
 }
 function saveLayout(patch) {
   const next = { ...readLayout(), ...patch };
@@ -134,6 +136,40 @@ function wireSplitter(id, panelId) {
     logLine("Column width reset.", "");
   });
 }
+
+/* A handle between the two panes of a column: drag to give one of them more
+   room, double-click to put it back. Remembered with the rest of the layout,
+   because how much log you want to see is a working preference, not a default
+   someone else should pick for you. */
+function wireRowSplit(handleId, topSel, varName, key) {
+  const handle = $(handleId);
+  const top = $(topSel);
+  if (!handle || !top) return;
+  const root = document.documentElement.style;
+  handle.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startH = top.getBoundingClientRect().height;
+    const parent = top.parentElement.getBoundingClientRect();
+    const onMove = (ev) => {
+      const h = Math.max(90, Math.min(parent.height - 190, startH + ev.clientY - startY));
+      root.setProperty(varName, Math.round(h) + "px");
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      saveLayout({ [key]: root.getPropertyValue(varName).trim() || null });
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  });
+  handle.addEventListener("dblclick", () => {
+    root.removeProperty(varName);
+    saveLayout({ [key]: null });
+  });
+}
+wireRowSplit("#split-left-rows", "#panel-run .grid", "--grid-h", "gridH");
+wireRowSplit("#split-right-rows", "#panel-run .rstack", "--rstack-h", "rstackH");
 
 /* The grid itself is `resize: vertical`; remember where it was let go. */
 function watchGridHeight(id) {
@@ -238,6 +274,12 @@ class GridController {
   //: Complete AND with something still to process: what RUN is actually for.
   readyToRun() {
     return this.cells.filter((c) => c.data_state === "full" && c.state !== "complete");
+  }
+  //: Every expected device present AND everything processed - the finished
+  //: folders. These are what a report is usually about, so they need a
+  //: selector of their own; "ready" is their opposite.
+  processed() {
+    return this.cells.filter((c) => c.data_state === "full" && c.state === "complete");
   }
 
   //: The colour the user reads. Completeness of the DATA comes first, because
@@ -482,47 +524,79 @@ const FILTERS = {
   ready:      { btn: "#ready-filter", cls: "ready-filter",
                 pick: () => runGrid.readyToRun(),
                 said: (n) => `Showing ${n} folder(s) ready to process.` },
+  done:       { btn: "#done-filter", cls: "done-filter",
+                pick: () => runGrid.processed(),
+                said: (n) => `Showing ${n} folder(s) complete and processed.` },
 };
-let activeFilter = null;
+/* These add up. Picking "ready" used to throw away everything "blocked" had
+   selected, which is the wrong behaviour when the selection is being built for
+   a report - there the question is usually blocked AND incomplete. Clicking a
+   lit one takes its folders back out again.
+
+   The dimming is the one thing that cannot add up (two dim rules at once dim
+   nearly everything), so it is applied only when exactly one filter is on. */
+const activeFilters = new Set();
+
+function paintFilters() {
+  const grid = $("#grid-run");
+  Object.entries(FILTERS).forEach(([key, f]) => {
+    $(f.btn).classList.toggle("active", activeFilters.has(key));
+    grid.classList.toggle(f.cls, activeFilters.size === 1 && activeFilters.has(key));
+  });
+}
 
 function clearFilter() {
-  if (!activeFilter) return;
-  const grid = $("#grid-run");
-  Object.values(FILTERS).forEach((f) => {
-    grid.classList.remove(f.cls);
-    $(f.btn).classList.remove("active");
-  });
-  activeFilter = null;
+  if (!activeFilters.size) return;
+  activeFilters.clear();
+  paintFilters();
 }
 
 function setFilter(key) {
-  const grid = $("#grid-run");
-  const same = activeFilter === key;
-  clearFilter();
-  if (same) { runGrid.render(); return; }   // clicking the lit one turns it off
   const f = FILTERS[key];
-  const hits = f.pick();
-  if (!hits.length) {
-    logLine("Nothing matches that filter right now.", "");
+  const hits = f.pick().map((c) => c.participant);
+  if (activeFilters.has(key)) {                 // clicking the lit one removes it
+    activeFilters.delete(key);
+    hits.forEach((p) => runGrid.selected.delete(p));
+    paintFilters();
+    runGrid.render();
+    runGrid._changed();
+    logLine(`Dropped ${hits.length} ${key} folder(s) from the selection.`, "");
     return;
   }
-  activeFilter = key;
-  grid.classList.add(f.cls);
-  $(f.btn).classList.add("active");
-  runGrid.selected = new Set(hits.map((c) => c.participant));
+  if (!hits.length) { logLine("Nothing matches that filter right now.", ""); return; }
+  activeFilters.add(key);
+  hits.forEach((p) => runGrid.selected.add(p));
+  paintFilters();
   runGrid.render();
   runGrid._changed();
-  logLine(f.said(runGrid.selected.size), key === "ready" ? "ok" : "warning");
+  logLine(f.said(hits.length) +
+          (activeFilters.size > 1
+            ? ` ${runGrid.selected.size} selected in all.` : ""),
+          key === "ready" ? "ok" : "warning");
 }
 
 Object.keys(FILTERS).forEach((key) =>
   $(FILTERS[key].btn).addEventListener("click", () => setFilter(key)));
+
+/* Everything, in one press - the usual first move when the report is meant to
+   cover the whole study rather than a subset. */
+$("#all-filter").addEventListener("click", () => {
+  const all = runGrid.cells.map((c) => c.participant);
+  const already = runGrid.selected.size === all.length && all.length > 0;
+  clearFilter();
+  runGrid.selected = already ? new Set() : new Set(all);
+  runGrid.render();
+  runGrid._changed();
+  logLine(already ? "Selection cleared." : `All ${all.length} folder(s) selected.`,
+          already ? "" : "ok");
+});
 
 function updateFlagCount() {
   const counts = {
     blocked: runGrid.flagged().length,
     incomplete: runGrid.incomplete().length,
     ready: runGrid.readyToRun().length,
+    done: runGrid.processed().length,
   };
   const words = {
     blocked: [`%n folder(s) hold files the pipeline cannot process. Click to select them.`,
@@ -531,6 +605,8 @@ function updateFlagCount() {
                  "Every folder has all the expected devices."],
     ready: [`%n folder(s) have every expected device and still have something to process.`,
             "Nothing is both complete and unprocessed."],
+    done: [`%n folder(s) have every expected device and are fully processed — the set a report is usually about.`,
+           "No folder is complete and fully processed yet."],
   };
   Object.entries(counts).forEach(([key, n]) => {
     const btn = $(FILTERS[key].btn);
@@ -539,7 +615,14 @@ function updateFlagCount() {
     btn.title = n ? words[key][0].replace("%n", String(n)) : words[key][1];
   });
   // A filter whose folders no longer match it has nothing left to show.
-  if (activeFilter && !counts[activeFilter]) clearFilter();
+  [...activeFilters].forEach((k) => { if (!counts[k]) activeFilters.delete(k); });
+  paintFilters();
+  const all = $("#all-filter");
+  if (all) {
+    all.classList.toggle("active",
+      runGrid.cells.length > 0 && runGrid.selected.size === runGrid.cells.length);
+    all.title = `Select all ${runGrid.cells.length} folder(s) \u2014 press again to clear`;
+  }
 }
 
 let flagReq = 0;
@@ -859,8 +942,16 @@ async function loadSeasonBoard(participants) {
   seasonBoard.pids = pids;
   if (!pids.length) { clearSeasonBoard("Select folders on the left to review their seasons."); return; }
   const mine = ++seasonBoard.req;
+  // The folder that was just added is the one worth looking at, so remember it
+  // and bring it into view when the new matrix arrives.
+  const before = new Set(seasonBoard.shownPids || []);
+  seasonBoard.focus = pids.find((x) => !before.has(x)) || null;
+  seasonBoard.shownPids = pids.slice();
   $("#sb-summary").textContent = "reading " + pids.length + " folder(s)\u2026";
-  $("#seasonboard").innerHTML = '<div class="muted">loading\u2026</div>';
+  // NOT innerHTML = "loading": throwing the matrix away collapses the pane to
+  // one line and loses the scroll before the new one exists, which is the
+  // flicker. Leave it up, dimmed, and swap it when the answer comes back.
+  $("#seasonboard").classList.add("sb-loading");
   const r = await api("/api/panel1/season-boards", {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ participants: pids }),
@@ -876,17 +967,16 @@ async function loadSeasonBoard(participants) {
   seasonBoard.boards.forEach((b) => b.seasons.forEach((s) => live.add(sbKey(b.participant, s.season))));
   seasonBoard.picked = new Set([...seasonBoard.picked].filter((k) => live.has(k)));
   if (!seasonBoard.devices.size) seasonBoard.devices = new Set(seasonBoard.implemented);
+  $("#seasonboard").classList.remove("sb-loading");
   renderSeasonBoard();
 }
 
 function clearSeasonBoard(msg) {
   seasonBoard.pids = []; seasonBoard.boards = []; seasonBoard.missing = [];
   seasonBoard.picked = new Set();
+  seasonBoard.shownPids = []; seasonBoard.focus = null;
   $("#sb-summary").textContent = msg;
-  // Rewriting the matrix used to send it back to the top, which looks exactly
-   // like the page jumping. Put the reader back where they were.
-  const keepScroll = $("#seasonboard").scrollTop;
-  setTimeout(() => { $("#seasonboard").scrollTop = keepScroll; }, 0);
+  $("#seasonboard").classList.remove("sb-loading");
   $("#sb-head-right").innerHTML = "";
   $("#sb-legend").innerHTML = "";
   $("#seasonboard").innerHTML = "";
@@ -939,6 +1029,9 @@ function sbRollup() {
 
 function renderSeasonBoard() {
   const host = $("#seasonboard");
+  // Where the reader was, kept across the rebuild. Ticking a cell re-renders
+  // the whole matrix, so without this every tick threw them back to the top.
+  const keepScroll = host.scrollTop;
   host.innerHTML = "";
   const boards = seasonBoard.boards;
   if (!boards.length) {
@@ -1004,8 +1097,10 @@ function renderSeasonBoard() {
         || String(a.participant).localeCompare(String(b.participant)))
     : boards;
 
+  let focusRow = null;
   ordered.forEach((b) => {
     const row = el("div", "sbm-row");
+    if (b.participant === seasonBoard.focus) { row.classList.add("just-added"); focusRow = row; }
     const rh = el("button", "sbm-pid pick");
     rh.textContent = b.suffix || b.participant;
     rh.title = b.participant + " \u2014 tick every season this folder has";
@@ -1073,6 +1168,17 @@ function renderSeasonBoard() {
     }
   });
   host.appendChild(grid);
+  // Put the reader back, then make sure the folder they just added is on
+  // screen - scrolled inside this pane only, never the page.
+  host.scrollTop = keepScroll;
+  if (focusRow) {
+    // Measured, not computed from offsetTop: the row's offset parent is not
+    // this pane, so offsets would be read against the wrong origin.
+    const hr = host.getBoundingClientRect();
+    const rr = focusRow.getBoundingClientRect();
+    if (rr.top < hr.top) host.scrollTop -= (hr.top - rr.top) + 6;
+    else if (rr.bottom > hr.bottom) host.scrollTop += (rr.bottom - hr.bottom) + 6;
+  }
 
   if (seasonBoard.missing.length) {
     host.appendChild(el("div", "sbm-note",
@@ -1316,6 +1422,9 @@ function runMode() { return ($("input[name=runmode]:checked") || {}).value || "n
 
 // What RUN will do to the current selection, from the grid's own counts:
 // total = items with input, done = items whose outputs already exist.
+/* The run plan used to sit there saying "Select folders to see what RUN will
+   do", which is a whole row of the action bar spent on nothing. The row exists
+   when it has something to report and not otherwise - see #run-plan:empty. */
 function updateRunPlan() {
   const mode = runMode(), m = RUN_MODES[mode];
   runBtn.innerHTML = m.label;
@@ -1323,7 +1432,10 @@ function updateRunPlan() {
   const sel = new Set(runGrid.list());
   const cells = runGrid.cells.filter((c) => sel.has(c.participant));
   const plan = $("#run-plan");
-  if (!cells.length) { plan.textContent = "Select folders to see what RUN will do."; return; }
+  // Nothing selected: say nothing. The row collapses (#run-plan:empty) rather
+  // than spending a line of the action bar on an instruction you have already
+  // followed by the time it would be useful.
+  if (!cells.length) { plan.textContent = ""; return; }
 
   // Ticked seasons take precedence, and the bar has to say so: otherwise the
   // same button would quietly mean two different scopes.
@@ -1821,10 +1933,21 @@ const recTree = { participants: [], open: new Set(), picked: null, req: 0,
 /* The items of one participant that the season chips let through. */
 function recItems(row) {
   if (recTree.season == null) return row.items;
-  return row.items.filter((it) => (it.season_n || 0) === recTree.season);
+  return row.items.filter((it) => seasonKind(it) === recTree.season);
 }
 
-/* One chip per season ordinal, with how many recordings sit behind it. */
+/* One chip per SEASON - winter, spring, summer, autumn - not per ordinal.
+   "S2" answers "which visit was this, for this participant", which is a
+   different question for every person and not comparable across them. Reading
+   several participants side by side means reading one season of the year
+   across all of them, so that is what the chips select. */
+const SEASON_ORDER = ["Winter", "Spring", "Summer", "Autumn"];
+function seasonKind(it) {
+  if (it.season_type && it.season_type !== "Other") return it.season_type;
+  const m = /^\s*(winter|spring|summer|autumn)/i.exec(it.season || "");
+  return m ? m[1][0].toUpperCase() + m[1].slice(1).toLowerCase() : "Other";
+}
+
 function renderSeasonChips() {
   const host = $("#rec-seasons");
   if (!host) return;
@@ -1834,12 +1957,16 @@ function renderSeasonChips() {
 
   const counts = {};
   const folders = {};
+  const years = {};
   rows.forEach((r) => r.items.forEach((it) => {
-    const n = it.season_n || 0;
-    counts[n] = (counts[n] || 0) + 1;
-    (folders[n] = folders[n] || new Set()).add(r.participant);
+    const k = seasonKind(it);
+    counts[k] = (counts[k] || 0) + 1;
+    (folders[k] = folders[k] || new Set()).add(r.participant);
+    const y = /(\d{4})/.exec(it.season || "");
+    if (y) (years[k] = years[k] || new Set()).add(y[1]);
   }));
-  const slots = Object.keys(counts).map(Number).sort((a, b) => a - b);
+  const kinds = Object.keys(counts).sort(
+    (a, b) => (SEASON_ORDER.indexOf(a) + 9) % 9 - (SEASON_ORDER.indexOf(b) + 9) % 9);
 
   host.innerHTML = "";
   const all = el("button", "rchip" + (recTree.season == null ? " on" : ""),
@@ -1848,16 +1975,15 @@ function renderSeasonChips() {
   all.addEventListener("click", () => { recTree.season = null; renderRecordings(); });
   host.appendChild(all);
 
-  slots.forEach((n) => {
-    const label = n ? "S" + n : "unplaced";
-    const b = el("button", "rchip" + (recTree.season === n ? " on" : ""),
-                 esc(label) + " <i>" + counts[n] + "</i>");
-    b.title = n
-      ? counts[n] + " recording(s) in the " + ordinal(n) + " season of " +
-        folders[n].size + " folder(s)"
-      : "Recordings whose season ordinal could not be worked out";
+  kinds.forEach((k) => {
+    const b = el("button", "rchip s-" + k.toLowerCase() +
+                 (recTree.season === k ? " on" : ""),
+                 esc(k) + " <i>" + counts[k] + "</i>");
+    b.title = counts[k] + " recording(s) in " + k.toLowerCase() + " across " +
+      folders[k].size + " folder(s)" +
+      (years[k] ? " \u00b7 " + [...years[k]].sort().join(", ") : "");
     b.addEventListener("click", () => {
-      recTree.season = recTree.season === n ? null : n;
+      recTree.season = recTree.season === k ? null : k;
       renderRecordings();
     });
     host.appendChild(b);
@@ -1884,7 +2010,7 @@ async function loadRecordings(participants) {
   recTree.participants = rows;
   // A season that no longer exists in this selection would hide everything.
   if (recTree.season != null &&
-      !rows.some((r) => r.items.some((it) => (it.season_n || 0) === recTree.season))) {
+      !rows.some((r) => r.items.some((it) => seasonKind(it) === recTree.season))) {
     recTree.season = null;
   }
   // open a single participant by default; keep many collapsed so the list
@@ -1911,7 +2037,7 @@ function renderRecordings() {
   const shown = rows.reduce((n, r) => n + recItems(r).length, 0);
   $("#mv-title").textContent = "\u00b7 " + shown + " recording(s) in " +
     rows.filter((r) => recItems(r).length).length + " folder(s)" +
-    (recTree.season != null ? " \u00b7 S" + recTree.season + " only" : "");
+    (recTree.season != null ? " \u00b7 " + recTree.season + " only" : "");
   if (!all) {
     host.innerHTML = '<div class="muted">Nothing processed in this selection yet.</div>';
     return;
@@ -1940,9 +2066,9 @@ function renderRecordings() {
     if (open) {
       groupBySeason(recItems(row)).forEach((grp) => {
         const sb = el("div", "rec-s");
-        const n = (grp.items[0] || {}).season_n;
+        const k = seasonKind(grp.items[0] || {});
         sb.appendChild(el("div", "rec-shead",
-          (n ? '<span class="rec-sn">S' + n + "</span>" : "") + esc(grp.season)));
+          '<i class="rec-sdot s-' + k.toLowerCase() + '"></i>' + esc(grp.season)));
         const devs = el("div", "rec-devs");
         // A season can hold several items of one device - Qualtrics has one
         // per survey - so the device name alone is ambiguous. Qualify it with
