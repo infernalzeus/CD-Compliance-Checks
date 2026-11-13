@@ -88,6 +88,15 @@ function saveLayout(patch) {
 }
 applyLayout(readLayout());
 
+/* The key is reference, not something to read every time, so whether it is
+   open is remembered with the rest of the layout. */
+(function keyFold() {
+  const box = document.getElementById("keybox");
+  if (!box) return;
+  box.open = readLayout().keyOpen === true;
+  box.addEventListener("toggle", () => saveLayout({ keyOpen: box.open }));
+})();
+
 function wireSplitter(id, panelId) {
   const handle = $(id);
   if (!handle) return;
@@ -793,6 +802,9 @@ let rPaneManual = false;          // did the user pick the pane themselves?
 let batchesLoaded = false;
 
 function showRPane(which, manual) {
+  // Progress left the tab strip for a pane of its own; a call naming it (or
+  // anything else without a pane) must not hide every tab instead.
+  if (!$("#rpane-" + which)) return;
   if (manual) rPaneManual = true;
   $$(".rtab").forEach((t) => t.classList.toggle("active", t.dataset.rtab === which));
   $$(".rpane").forEach((p) => p.classList.toggle("hidden", p.id !== "rpane-" + which));
@@ -871,6 +883,10 @@ function clearSeasonBoard(msg) {
   seasonBoard.pids = []; seasonBoard.boards = []; seasonBoard.missing = [];
   seasonBoard.picked = new Set();
   $("#sb-summary").textContent = msg;
+  // Rewriting the matrix used to send it back to the top, which looks exactly
+   // like the page jumping. Put the reader back where they were.
+  const keepScroll = $("#seasonboard").scrollTop;
+  setTimeout(() => { $("#seasonboard").scrollTop = keepScroll; }, 0);
   $("#sb-head-right").innerHTML = "";
   $("#sb-legend").innerHTML = "";
   $("#seasonboard").innerHTML = "";
@@ -1238,7 +1254,6 @@ async function startSeasonRun(force, dryRun) {
                "running mode-" + currentRunMode);
   logLine(currentRunMode.toUpperCase() + ": " + label + " \u00b7 " + devices.join(", "),
           force ? "warning" : "ok");
-  if (!rPaneManual) showRPane("progress");
 
   const resp = await api("/api/run", {
     method: "POST",
@@ -1253,6 +1268,7 @@ async function startSeasonRun(force, dryRun) {
   }).catch(() => ({ error: "request failed" }));
   if (resp.error) { logLine("Error: " + resp.error, "error"); return; }
   realJobActive = !dryRun;
+  jobFinished = false;
   currentJobId = resp.job_id;
   openJobSocket(resp.job_id, !!dryRun);
 }
@@ -1389,19 +1405,39 @@ runBtn.addEventListener("click", () => {
 $("#stop-btn").addEventListener("click", async () => {
   if (!currentJobId) return;
   logLine("Stopping — terminating the running pipeline…", "warning");
-  try { await fetch(`/api/jobs/${currentJobId}/stop`, { method: "POST" }); }
-  catch (_) { logLine("Stop request failed.", "error"); }
+  try {
+    const r = await fetch(`/api/jobs/${currentJobId}/stop`, { method: "POST" });
+    const body = await r.json().catch(() => ({}));
+    // Say it was accepted. Without this, a stop whose progress events never
+    // arrive (a dropped socket) is indistinguishable from a stop that was
+    // never heard, which is exactly how a finished run looks "stuck".
+    logLine(body.stopping
+      ? "Stop accepted by the server — the pipeline is unwinding. " +
+        "A tool already running is killed; the batch record is written either way."
+      : `Stop was not accepted: ${body.error || r.status}`,
+      body.stopping ? "warning" : "error");
+  } catch (_) { logLine("Stop request failed — is the dashboard still running?", "error"); }
 });
 
+/* A log should behave like a terminal: the newest line is where you are
+   looking, and nobody should have to scroll down to find it. Following only
+   when the reader is already at the bottom means scrolling up to read
+   something still works - the tail stops chasing until they come back. */
+function follows(box) { return box.scrollHeight - box.scrollTop - box.clientHeight < 48; }
+function tail(box) { if (box) box.scrollTop = box.scrollHeight; }
+function appendFollowing(box, node) {
+  const stick = follows(box);
+  box.appendChild(node);
+  if (stick) tail(box);
+}
+
 function logLine(msg, level) {
-  const log = $("#log-run");
-  const line = el("div", "line " + (level || ""), msg);
-  log.appendChild(line);
-  log.scrollTop = log.scrollHeight;
+  appendFollowing($("#log-run"), el("div", "line " + (level || ""), msg));
 }
 
 let currentLabel = null;
 let realJobActive = false;   // a non-dry run is currently in progress
+let jobFinished = true;      // set by job_end; a dropped socket never sets it
 let currentJobId = null;
 let currentRunMode = "new";   // mode of the job in progress, kept on its status pill
 
@@ -1417,7 +1453,7 @@ function ensureCard(label) {
   card.innerHTML =
     `<div class="p-label"><span class="p-name">${label}</span><span class="p-badge"></span></div>` +
     `<div class="steps"></div>`;
-  $("#progress-list").appendChild(card);
+  appendFollowing($("#progress-list"), card);
   progressCards[label] = { el: card, steps: {}, badge: $(".p-badge", card) };
   return progressCards[label];
 }
@@ -1426,6 +1462,8 @@ function stepRow(label, key) {
   let row = card.steps[key];
   if (!row) {
     row = el("div", "stepline");
+    const stick = follows($("#progress-list"));
+    setTimeout(() => { if (stick) tail($("#progress-list")); }, 0);
     row.innerHTML =
       `<span class="st-ic">▶</span><span class="st-name"></span><span class="st-time">0.0s</span>` +
       `<div class="st-detail"></div><div class="st-bar"><i></i></div>`;
@@ -1523,6 +1561,7 @@ async function startRun({ dryRun = false, force = false, mode = "new" } = {}) {
   });
   if (resp.error) { logLine("Error: " + resp.error, "error"); return; }
   if (!dry_run) realJobActive = true;
+  jobFinished = false;
   currentJobId = resp.job_id;
   openJobSocket(resp.job_id, dry_run);
 }
@@ -1533,16 +1572,75 @@ function setJobStatus(text, cls) {
   p.className = "pill " + (cls || "");
 }
 
-function openJobSocket(jobId, dryRun) {
+/* Losing the socket is not the run ending. The worker thread carries on
+   whatever the browser is doing, so the page reconnects - asking only for the
+   events it missed - and the RUN lock is released by the job itself, never by
+   the transport giving up. */
+let jobSeq = 0;              // the last _seq this page has seen
+let jobSocket = null;
+let jobRetries = 0;
+
+function openJobSocket(jobId, dryRun, resuming) {
+  if (!resuming) jobSeq = 0;
   setJobStatus(RUN_MODES[currentRunMode].tag, `running mode-${currentRunMode}`);
-  if (!rPaneManual) showRPane("progress");   // the pane worth watching, while it runs
-  const ws = new WebSocket(`ws://${location.host}/ws/jobs/${jobId}`);
-  ws.onmessage = (ev) => handleEvent(JSON.parse(ev.data));
-  ws.onclose = () => { if (!dryRun) realJobActive = false; };
-  ws.onerror = () => { logLine("WebSocket error", "error"); if (!dryRun) realJobActive = false; };
+  const ws = new WebSocket(
+    `ws://${location.host}/ws/jobs/${jobId}?since=${jobSeq}`);
+  jobSocket = ws;
+  ws.onopen = () => {
+    if (jobRetries) logLine("Progress connection restored.", "ok");
+    jobRetries = 0;
+  };
+  ws.onmessage = (ev) => {
+    const e = JSON.parse(ev.data);
+    if (typeof e._seq === "number" && e._seq > jobSeq) jobSeq = e._seq;
+    handleEvent(e);
+  };
+  ws.onerror = () => { /* onclose always follows; it does the talking */ };
+  ws.onclose = () => {
+    if (jobSocket !== ws) return;              // superseded by a newer socket
+    if (currentJobId !== jobId || jobFinished) return;
+    if (jobRetries >= 30) {
+      logLine("Lost the progress connection. The run itself is unaffected — " +
+              "reload the page to pick it up again.", "error");
+      return;
+    }
+    jobRetries += 1;
+    if (jobRetries === 1) {
+      logLine("Progress connection dropped — reconnecting. " +
+              "The run keeps going regardless.", "warning");
+    }
+    setTimeout(() => openJobSocket(jobId, dryRun, true), Math.min(1000 * jobRetries, 5000));
+  };
 }
 
+/* A run outlives the page that started it. If one is still going, pick it back
+   up instead of showing an idle dashboard over a live pipeline. */
+async function adoptRunningJob() {
+  const resp = await api("/api/jobs").catch(() => null);
+  const job = resp && resp.jobs && resp.jobs[0];
+  if (!job) return;
+  currentJobId = job.id;
+  jobFinished = false;
+  realJobActive = !job.dry_run;
+  currentRunMode = job.dry_run ? "preview" : job.force ? "force" : "new";
+  showStop(true);
+  logLine(`Re-attached to a run already in progress (${job.participants.join(", ")})` +
+          (job.batch_id ? ` · batch ${job.batch_id}` : ""), "warning");
+  openJobSocket(job.id, !!job.dry_run);
+}
+adoptRunningJob();
+
 function handleEvent(e) {
+  if (e.type === "job_status") {
+    // Sent on every (re)connect. A job that ended while we were away has to
+    // release the button here, because its job_end may already be behind us.
+    if (e.status !== "queued" && e.status !== "running") {
+      jobFinished = true; realJobActive = false; showStop(false);
+      setJobStatus(e.status === "done" ? "done" : e.status, e.status === "done" ? "done" : "error");
+      logLine(`The run is ${e.status}.`, e.status === "done" ? "ok" : "warning");
+    }
+    return;
+  }
   if (e.type === "batch_start") logLine(`Batch ${e.batch_id} started by ${e.initials}`, "ok");
   if (e.type === "batch_end") { logLine(`Batch ${e.batch_id} recorded`, "ok"); loadBatches(); }
   switch (e.type) {
@@ -1619,6 +1717,7 @@ function handleEvent(e) {
       logLine(`participant run finished: ${JSON.stringify(e.counts)}`);
       break;
     case "job_end":
+      jobFinished = true;                     // stop reconnecting to a job that is over
       if (!e.dry_run) realJobActive = false;   // free the button for the next real run
       killTimer(); showStop(false);
       setJobStatus(`${RUN_MODES[currentRunMode].tag} · ${e.status}`,

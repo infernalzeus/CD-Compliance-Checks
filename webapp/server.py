@@ -1006,6 +1006,20 @@ async def api_shutdown() -> JSONResponse:
     return JSONResponse({"stopping": True, "killed_processes": killed})
 
 
+@app.get("/api/jobs")
+async def api_jobs() -> JSONResponse:
+    """The jobs that are still going, newest first.
+
+    A run outlives the page that started it: the worker thread does not care
+    whether anyone is watching. Without this, a reload (or a dropped socket)
+    left a live run with no way back to it - invisible, and unstoppable because
+    STOP needs the job id.
+    """
+    live = [j.info() for j in _jobs.jobs.values() if j.status in ("queued", "running")]
+    live.sort(key=lambda j: j["created_at"], reverse=True)
+    return JSONResponse({"jobs": live})
+
+
 @app.get("/api/jobs/{job_id}")
 async def api_job(job_id: str) -> JSONResponse:
     job = _jobs.get(job_id)
@@ -1059,7 +1073,10 @@ async def _await_disconnect(websocket: WebSocket) -> None:
 
 
 @app.websocket("/ws/jobs/{job_id}")
-async def ws_job(websocket: WebSocket, job_id: str) -> None:
+async def ws_job(websocket: WebSocket, job_id: str, since: int = 0) -> None:
+    """Stream a job's events. `since` is the last `_seq` the client already has,
+    so a reconnecting page is sent the gap rather than the whole run again - a
+    long run's history is tens of thousands of lines."""
     await websocket.accept()
     job = _jobs.get(job_id)
     if not job:
@@ -1069,14 +1086,23 @@ async def ws_job(websocket: WebSocket, job_id: str) -> None:
 
     queue: asyncio.Queue = asyncio.Queue()
     job.subscribers.append(queue)
-    last_seq = 0
+    last_seq = max(0, since)
     disconnected = asyncio.ensure_future(_await_disconnect(websocket))
     getter: Optional[asyncio.Future] = None
     try:
-        # Replay backlog first.
+        # Replay the backlog the client has not already seen.
         for event in list(job.history):
+            if event.get("_seq", 0) <= last_seq:
+                continue
             await websocket.send_json(event)
             last_seq = max(last_seq, event.get("_seq", 0))
+        # Tell a reconnecting client where the job stands, even if the job ended
+        # while it was away and there is nothing left to replay.
+        await websocket.send_json({"type": "job_status", "status": job.status,
+                                   "job_id": job.id, "_seq": last_seq})
+        if job.status not in ("queued", "running"):
+            await websocket.close()
+            return
         # Then stream new events (skipping any already replayed), racing each
         # wait against the socket closing so shutdown is never blocked on us.
         while not _shutting_down.is_set():

@@ -1208,3 +1208,90 @@ body.col-resizing { cursor: col-resize; user-select: none; }
 .rchip.on i { opacity: .9; }
 .rec-sn { display: inline-block; min-width: 20px; margin-right: 7px; font-weight: 700;
           font-size: 10px; color: var(--accent); }
+
+/* ======================================================================
+   PANEL 1 AS A FOUR-PANE TERMINAL
+   The page used to be taller than the window, so selecting a folder changed
+   the document's height and the browser moved the scroll position - which
+   read as "it jumped back to the top" - and every pane that re-rendered lost
+   its own scroll with it. Nothing here scrolls the page: the window is
+   divided into four panes, each sized to the room it has and scrolling
+   inside itself, with the two logs following their own tail.
+   ====================================================================== */
+body { display: flex; flex-direction: column; height: 100%; }
+.topbar { position: static; flex: 0 0 auto; }
+main.panel { flex: 1 1 auto; }
+#panel-view, #panel-t2 { overflow: auto; }
+#panel-run { min-height: 0; overflow: hidden; gap: 12px; padding: 12px 14px; }
+
+/* --- the four panes ---------------------------------------------------- */
+#panel-run .left, #panel-run .right { padding: 11px 12px 12px; border-radius: 10px; }
+#panel-run .panel-head { margin-bottom: 8px; }
+#panel-run .grid { flex: 1 1 var(--grid-h, 46%); min-height: 92px; max-height: none;
+                   border-radius: 6px; }
+#panel-run .logbox { flex: 1 1 34%; min-height: 76px; margin-top: 9px; }
+#panel-run .logbox > .log { flex: 1 1 auto; height: auto; min-height: 0; border-radius: 6px; }
+#panel-run .rstack { flex: 1 1 56%; display: flex; flex-direction: column; min-height: 118px; }
+#panel-run .rstack > .rpane:not(.hidden) { flex: 1 1 auto; min-height: 0; overflow: auto; }
+#panel-run .rstack > .rpane { min-height: 0; }
+#panel-run .qbox { flex: 1 1 44%; display: flex; flex-direction: column;
+                   min-height: 104px; margin-top: 9px; }
+#panel-run .qbox > .progress-list { flex: 1 1 auto; min-height: 0; max-height: none;
+  overflow: auto; background: #0c0e12; border: 1px solid var(--line);
+  border-radius: 6px; padding: 7px 8px; gap: 6px; }
+
+/* --- sharper: hairlines, mono heads, thin scrollbars ------------------- */
+#panel-run .panel-head h2, #panel-run .logbox-head, #panel-run .qhead,
+#panel-run .rtab, #panel-run .ab-lbl {
+  font-family: "Cascadia Code", Consolas, ui-monospace, monospace;
+}
+#panel-run .panel-head h2 { font-size: 11.5px; letter-spacing: 1.1px; }
+#panel-run .qhead, #panel-run .logbox-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  font-size: 10.5px; letter-spacing: 1.1px; color: var(--muted);
+  text-transform: uppercase; padding: 0 0 5px; margin: 0 0 6px;
+  border-bottom: 1px solid var(--line);
+}
+#panel-run .qhead > span:first-child::before,
+#panel-run .logbox-head::before {
+  content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 7px;
+  vertical-align: 1px; background: var(--accent); border-radius: 1px; opacity: .8;
+}
+#panel-run .log, #panel-run .progress-list, #panel-run .grid,
+#panel-run .rstack > .rpane, #panel-run .seasonboard {
+  scrollbar-width: thin; scrollbar-color: #39404e transparent;
+}
+#panel-run .log { font-size: 11.5px; line-height: 1.42; padding: 7px 9px; }
+#panel-run .pitem { border-radius: 6px; padding: 7px 9px; }
+#panel-run .rtabs { flex: 0 0 auto; }
+#panel-run .rtab { font-size: 11px; letter-spacing: .6px; border-radius: 6px; }
+#panel-run .btn, #panel-run .btn.ghost { border-radius: 7px; }
+#panel-run .btn.run { border-radius: 8px; }
+
+/* --- the key, folded ---------------------------------------------------- */
+.keybox { flex: 0 0 auto; margin: 8px 0 0; }
+.keybox > summary { cursor: pointer; color: var(--muted); font-size: 10.5px;
+  letter-spacing: 1.1px; text-transform: uppercase; list-style: none;
+  font-family: "Cascadia Code", Consolas, ui-monospace, monospace;
+  padding: 4px 0; border-bottom: 1px solid var(--line); }
+.keybox > summary::-webkit-details-marker { display: none; }
+.keybox > summary::before { content: "\25b8 "; color: var(--accent); }
+.keybox[open] > summary::before { content: "\25be "; }
+.keybox > .legend { margin: 8px 2px 2px; font-size: 11px; gap: 9px 12px;
+                    max-height: 26vh; overflow: auto; }
+
+/* --- refinements after looking at it ----------------------------------- */
+/* The middle column was 126px wide to hold the RUN button; RUN moved into the
+   action bar, so all it carries now is the splitter and the seam. Giving the
+   width back to the two panes is worth more than the empty channel. */
+#panel-run { grid-template-columns: minmax(300px, var(--left-w, 0.85fr)) 30px minmax(0, 1.3fr); }
+#panel-run .middle { padding-top: 0; }
+/* The grid takes the room its folders need, up to its share - a short
+   selection should not leave a tall empty box above the log. */
+#panel-run .grid { flex: 0 1 auto; max-height: var(--grid-h, 46%); }
+/* One-item heads read left to right; only the two-part heads are spread. */
+#panel-run .logbox-head { justify-content: flex-start; }
+#panel-run .logbox-head.batch-head { justify-content: space-between; }
+#panel-run .rstack { flex: 1 1 58%; }
+#panel-run .qbox { flex: 1 1 42%; }
+.keybox > summary::before { margin-right: 4px; }

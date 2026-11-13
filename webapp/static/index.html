@@ -99,6 +99,8 @@
            the four seasons have data, one mark per season so that adding a
            device never adds a mark. Which device is missing from which season
            is the right-hand panel's job, not a colour over the whole cell. -->
+      <details class="keybox" id="keybox">
+        <summary>KEY · colour and marks</summary>
       <div class="legend legend-2">
         <span class="lg-head">Colour</span>
         <span><i class="sw tone-empty"></i> no data at all</span>
@@ -113,6 +115,7 @@
         <span><i class="sw cov-dot s-off"></i> nothing here yet</span>
         <span class="lg-note">Naming problems are on the right, under Naming — they do not mark the cell.</span>
       </div>
+      </details>
       <div class="logbox">
         <div class="logbox-head">MESSAGE / LOG</div>
         <div class="log" id="log-run"></div>
@@ -139,12 +142,12 @@
 
       <div class="rtabs" role="tablist">
         <button class="rtab active" data-rtab="status" role="tab" title="Season and device status for everything selected, with the buttons that act on it">Status<span class="rbadge" id="rb-status"></span></button>
-        <button class="rtab" data-rtab="progress" role="tab" title="What the running job is doing, item by item">Progress<span class="rbadge" id="rb-progress"></span></button>
         <button class="rtab" data-rtab="naming" role="tab" title="Naming problems in the selected folders' input files">Naming<span class="rbadge" id="rb-naming"></span></button>
         <button class="rtab" data-rtab="files" role="tab" title="The staging files behind one selected folder">Files<span class="rbadge" id="rb-files"></span></button>
         <button class="rtab" data-rtab="batches" role="tab" title="Every run of the pipeline, newest first">Batches<span class="rbadge" id="rb-batches"></span></button>
       </div>
 
+      <div class="rstack">
       <!-- Status: what is outstanding across the WHOLE selection, broken down
            the way the study runs - participants down, up to four seasons
            across. The left grid answers "who needs attention"; this answers
@@ -165,10 +168,6 @@
         <span id="sb-participant" hidden></span>
       </div>
 
-      <div class="rpane hidden" id="rpane-progress">
-        <div class="progress-list" id="progress-list"></div>
-      </div>
-
       <div class="rpane hidden" id="rpane-naming">
         <div class="pane-sub">Naming check <span id="flag-scope"></span></div>
         <div class="flaglist" id="flaglist"><div class="muted">Select folders to see naming issues in their input files.</div></div>
@@ -187,6 +186,17 @@
       <div class="rpane hidden" id="rpane-files">
         <div class="pane-sub">WT OneDrive staging <span id="fb-participant"></span></div>
         <div class="filetree" id="filetree"><div class="muted">Select a single cell to view its staging files.</div></div>
+      </div>
+      </div><!-- /.rstack -->
+
+      <!-- The fourth pane. What a run is doing is not something to go and find
+           under a tab: it is the thing you watch while reading the rest. -->
+      <div class="qbox" id="qbox-progress">
+        <div class="qhead">
+          <span>PROGRESS · live<span class="rbadge" id="rb-progress"></span></span>
+          <span class="qhead-right" id="prog-note"></span>
+        </div>
+        <div class="progress-list" id="progress-list"></div>
       </div>
     </section>
 

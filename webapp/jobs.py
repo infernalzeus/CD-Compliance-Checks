@@ -54,6 +54,9 @@ class Job:
         self.subscribers: list[asyncio.Queue] = []
         self.created_at = datetime.now().isoformat(timespec="seconds")
         self.cancel_event = threading.Event()
+        #: The running pipeline's bus, so a stop can be recorded in the batch's
+        #: own event log rather than only pushed at whoever is watching.
+        self.bus = None
         self._seq = 0
 
     def next_seq(self) -> int:
@@ -128,14 +131,14 @@ class JobManager:
             return False
         job.cancel_event.set()
         killed = tools.terminate_all()
-        self._emit(
-            job,
-            {
-                "type": "log",
-                "level": "warning",
-                "message": f"Stop requested — cancelling ({killed} process(es) terminated).",
-            },
-        )
+        message = f"Stop requested — cancelling ({killed} process(es) terminated)."
+        if job.bus is not None:
+            # Through the bus, so the batch recorder writes it down too: a
+            # record that says "cancelled" without saying why is a record that
+            # has to be guessed at later.
+            job.bus.emit("log", level="warning", message=message)
+        else:
+            self._emit(job, {"type": "log", "level": "warning", "message": message})
         return True
 
     def stop_all(self) -> int:
@@ -202,6 +205,7 @@ class JobManager:
         job.status = "running"
         bus = EventBus()
         bus.subscribe(lambda event: self._emit(job, event))
+        job.bus = bus
 
         self._emit(
             job,
