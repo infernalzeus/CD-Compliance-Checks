@@ -24,7 +24,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
-from . import manifest, naming, results
+from . import batches, manifest, naming, results
 
 #: Order severities are reported in. "skipped" first: it is the only one that
 #: stops a file being processed at all.
@@ -137,6 +137,14 @@ def build(config: Config, participants: list[str],
                             "participants": len(s["participants"]),
                             "pct_compliance_mean": _pct(s["pct"]),
                             **_verdict_counts(s["items"])})
+
+    # --- the runs behind all this --------------------------------------------
+    # A report is a picture of the data, not of a run - but "when was this last
+    # touched, and what did it cost" is the first thing anyone asks of it.
+    try:
+        runs = batches.run_summaries(config)
+    except Exception:
+        runs = []
 
     # --- naming ---------------------------------------------------------------
     # Worst first everywhere: a file that cannot be read never gets a verdict,
@@ -263,6 +271,7 @@ def build(config: Config, participants: list[str],
         "outstanding": sorted(outstanding, key=lambda r: (r["participant"], r["n"] or 0,
                                                           r["device"])),
         "missing_seasons": missing_seasons,
+        "runs": runs,
         "naming": {"counts": flag_counts, "flags": flags},
         "rows": sorted(rows, key=lambda r: (r["participant"], r["season"], r["device"])),
         "output_root": str(config.paths.output_root),
@@ -414,6 +423,43 @@ _COLS = [
     ("notread", "not read",     "num"),
     ("warn",    "warnings",     "num"),
 ]
+
+
+def _hm(seconds: float) -> str:
+    """1 h 36 m. Hours and minutes is how these are discussed; seconds are noise."""
+    m = int(round((seconds or 0) / 60))
+    return f"{m // 60} h {m % 60:02d} m" if m >= 60 else f"{m} m"
+
+
+def _runs_table(runs: list[dict[str, Any]]) -> str:
+    if not runs:
+        return ""
+    body = []
+    for r in runs:
+        it = r.get("items") or {}
+        bad = it.get("failed", 0) + it.get("cancelled", 0)
+        body.append([
+            f'<code>{_e(r["batch_id"])}</code>',
+            _e(str(r["started_at"]).replace("T", " ")[:16]),
+            _hm(r["seconds"]),
+            f'<span>{r["participants_done"]}<span class="of"> of {r["asked"]}</span></span>',
+            str(r["seasons"]),
+            f'{r["gb"]:.2f} GB',
+            (f'<b class="nmark warning">{_e(r["status"])}</b>' if r["status"] != "done"
+             else '<span class="ok-w">done</span>') +
+            (f' <span class="of">{bad} not finished</span>' if bad else ""),
+        ])
+    tot_s = sum(r["seconds"] for r in runs)
+    tot = [["<b>total</b>", f'<span class="of">{len(runs)} run(s)</span>', f"<b>{_hm(tot_s)}</b>",
+            f'<b>{sum(r["participants_done"] for r in runs)}</b>',
+            f'<b>{sum(r["seasons"] for r in runs)}</b>',
+            f'<b>{sum(r["gb"] for r in runs):.2f} GB</b>', ""]]
+    return (f"<h2>Processing runs \u2014 last {len(runs)}</h2>" +
+            _table(["batch", "started", "took", "folders", "seasons", "downloaded", "result"],
+                   body + tot, "plain runs") +
+            '<p class="why">Counted in <b>seasons</b>, not items: a Qualtrics intake can '
+            'answer for several seasons at once, so an item total mixes two units. '
+            'Nearly all of the time is actigraph epoching \u2014 about 19 minutes a recording.</p>')
 
 
 def _row_cells(x: dict[str, Any]) -> dict[str, tuple[str, Any]]:
@@ -599,6 +645,16 @@ def render_html(report: dict[str, Any]) -> str:
   .foot {{ margin-top: 24px; padding-top: 9px; border-top: 1px solid #e6e9f0;
           font-size: 10.5px; color: #5a6475; }}
   code {{ font-size: 10.5px; }}
+  table.runs td:first-child {{ font-size: 10px; }}
+  table.runs tr:last-child td {{ border-top: 2px solid #c9d2e0; }}
+  .of {{ color: #6b7686; font-weight: 400; }}
+  .ok-w {{ color: #197a46; font-weight: 700; }}
+  details.fold > summary {{ cursor: pointer; list-style: none; display: flex;
+    align-items: baseline; gap: 10px; }}
+  details.fold > summary::-webkit-details-marker {{ display: none; }}
+  details.fold > summary h2 {{ display: inline; }}
+  details.fold > summary::before {{ content: "\u25b8"; color: #6b7686; }}
+  details.fold[open] > summary::before {{ content: "\u25be"; }}
   @media print {{
     body {{ padding: 0; font-size: 10px; }}
     .bar {{ display: none; }}
@@ -625,6 +681,8 @@ def render_html(report: dict[str, Any]) -> str:
     <span>mean compliance</span></div>
 </div>
 
+{_runs_table(report.get('runs') or [])}
+
 <div class="bar">
   <button id="b-table" class="on">Table</button>
   <button id="b-detail">Detail</button>
@@ -639,7 +697,10 @@ def render_html(report: dict[str, Any]) -> str:
 {blocks or '<p class="none">Nothing selected.</p>'}
 </div>
 
-<h2>Naming check — every problem, worst first</h2>
+<details class="fold"{' open' if any(f.get('severity') != 'info' for f in report['naming']['flags']) and len(report['naming']['flags']) <= 12 else ''}>
+<summary><h2>Naming check — every problem, worst first</h2>
+<span class="of">{sum(1 for f in report['naming']['flags'] if f.get('severity') == 'skipped')} not read ·
+{sum(1 for f in report['naming']['flags'] if f.get('severity') == 'warning')} warning(s)</span></summary>
 {_table(['', 'folder', 'season', 'file', 'what is wrong'],
         [[f'<b class="nmark {_e(str(f.get("severity") or ""))}">'
           f'{"\u2715" if f.get("severity") == "skipped" else "\u26a0"}</b> '
@@ -660,13 +721,13 @@ and the recording counts as missing. <b>warning</b> means it is read and process
 and the name should still be corrected.
 {(' ' + str(flag_counts.get('info', 0)) + ' further cosmetic note(s) are not listed.')
  if flag_counts.get('info') else ''}</p>
+</details>
 
 <div class="foot">
-  Staging: <code>{_e(report['source_root'])}</code><br>
-  Pre-processed: <code>{_e(report['output_root'])}</code><br>
-  <b>Ready</b> means every expected device has data and no file is being skipped —
-  it does not mean the data is compliant, which is what the verdicts say.<br>
-  Contains participant identifiers — keep it inside Tier 1.
+  <b>Ready</b> = every expected device has data and nothing is being skipped. It is
+  not a statement about compliance; the verdicts are. · Contains participant
+  identifiers — keep inside Tier 1.<br>
+  <code>{_e(report['source_root'])}</code> → <code>{_e(report['output_root'])}</code>
 </div>
 
 <script>

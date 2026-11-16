@@ -292,6 +292,69 @@ def list_batches(config: Config, include_archived: bool = False,
     return out
 
 
+def run_summaries(config: Config, limit: int = 12) -> list[dict[str, Any]]:
+    """One row per recorded run: what it covered and what it cost.
+
+    Counts SEASONS rather than items. Qualtrics is a single intake read that
+    can answer for several seasons at once, so an item total mixes two units
+    and reads high; the season folder is the unit of work, and the actigraph
+    recording inside it is where the time actually goes.
+
+    Read-only, and tolerant: a run still in flight has no batch.json yet, and a
+    truncated event log costs that row its season count, not the table.
+    """
+    rows: list[dict[str, Any]] = []
+    folder = private_dir(config)
+    if not folder.is_dir():
+        return rows
+    for d in sorted(folder.iterdir(), reverse=True)[:limit]:
+        rec_path = d / "batch.json"
+        if not rec_path.is_dir() and not rec_path.exists():
+            continue
+        try:
+            rec = json.loads(rec_path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        seasons: set[tuple[str, str]] = set()
+        pids: set[str] = set()
+        downloaded = 0
+        try:
+            for line in (d / "events.jsonl").read_text(
+                    encoding="utf-8", errors="replace").splitlines():
+                if '"item_start"' not in line and '"download_start"' not in line:
+                    continue
+                ev = json.loads(line)
+                ev = ev["type"] if isinstance(ev.get("type"), dict) else ev
+                if ev.get("type") == "download_start":
+                    downloaded += int(ev.get("total_bytes") or 0)
+                    continue
+                parts = [x.strip() for x in str(ev.get("label") or "").split("/")]
+                if len(parts) >= 3:
+                    pids.add(parts[0])
+                    if parts[2] != "qualtrics":        # intake, not a season's recording
+                        seasons.add((parts[0], parts[1]))
+        except Exception:
+            pass
+        results = rec.get("results") or []
+        complete = [r for r in results if not (r.get("counts") or {}).get("cancelled")]
+        rows.append({
+            "batch_id": rec.get("batch_id", d.name),
+            "started_at": rec.get("started_at", ""),
+            "finished_at": rec.get("finished_at", ""),
+            "seconds": rec.get("seconds") or 0,
+            "status": rec.get("status", ""),
+            "mode": rec.get("mode_label") or rec.get("mode", ""),
+            "initials": rec.get("initials", ""),
+            "asked": rec.get("n_participants") or len(results),
+            "participants_done": len(complete),
+            "participants_touched": len(pids),
+            "seasons": len(seasons),
+            "gb": round(downloaded / 1e9, 2),
+            "items": rec.get("items") or {},
+        })
+    return rows
+
+
 def archive_batch(config: Config, batch_id: str, initials: str) -> dict[str, Any]:
     """Hide a batch from the list, keeping both records with who/when."""
     clean = normalise_initials(initials)
